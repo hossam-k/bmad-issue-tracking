@@ -1,14 +1,15 @@
 ---
 name: bmad-issue-tracking-sync
-description: 'Sync sprint-status.yaml entries to GitLab/GitHub Issues. Use when the user says "sync issues" or wants to push sprint status to the issue tracker.'
+description: 'Sync sprint-status.yaml entries to GitLab/GitHub Issues or OpenProject work packages. Use when the user says "sync issues" or wants to push sprint status to the issue tracker.'
 ---
 
-# Sync Sprint Status to Issues (GitLab or GitHub)
+# Sync Sprint Status to Issues (GitLab, GitHub or OpenProject)
 
 ## Prerequisites
 
-- `glab` CLI (for GitLab) or `gh` CLI (for GitHub) installed and authenticated
-- Repository has Issues enabled
+- `glab` CLI (for GitLab) or `gh` CLI (for GitHub) installed and authenticated — for the issue tracker when it is GitLab/GitHub, and for the git remote's MRs/PRs and CI
+- Repository has Issues enabled (GitLab/GitHub issue tracking only)
+- For OpenProject (`platform: openproject`): the `openproject-mcp` server connected in this session (its name is `issue_tracking.openproject.mcp_server`); unattended runs need it registered in the project's `.mcp.json`
 - `sprint-status.yaml` exists at `{implementation_artifacts}/sprint-status.yaml`
 - `prd_key` in `prd.md` frontmatter (required — the sync fails closed if absent; run `/bmad-issue-tracking-setup` if not set)
 - Workflow files deployed by `/bmad-issue-tracking-setup` in `_bmad/_config/custom/workflows/`

@@ -355,3 +355,30 @@ def test_get_issue_status_label_matches_only_the_mapped_status(tmp_path, wp, tar
 def test_status_label_equals_what_sync_issues_compares_against():
     """sync-issues compares current_status_label to status{sep}{mapped_status}."""
     assert 'current_status_label eq "status{sep}{mapped_status}"' in WORKFLOWS["common/sync-issues.yaml"]["content"]
+
+
+# --------------------------------------------------------------------------- setup <-> adapter
+
+
+SETUP_SKILL = WORKFLOWS_DIR.parent.parent / "SKILL.md"
+
+
+def test_setup_writes_every_key_the_adapter_reads():
+    """Step 7b's sample config and load-config must name the same keys, or a freshly set-up
+    project would stop at the first READ of a missing dotpath."""
+    setup = SETUP_SKILL.read_text(encoding="utf-8")
+    block = setup[setup.index("openproject:\n"):]
+    block = block[: block.index("```")]
+    for key in ["mcp_server", "type_ids", "status_ids"] + KINDS + BMAD_STATUSES:
+        assert re.search(rf"^\s+{re.escape(key)}:", block, flags=re.M), f"setup step 7b does not write '{key}'"
+    # ...and nothing the adapter would never read
+    written = set(re.findall(r"^\s+([\w-]+):", block, flags=re.M)) - {"openproject", "mcp_server", "type_ids", "status_ids"}
+    assert written == set(KINDS) | set(BMAD_STATUSES)
+
+
+def test_setup_does_not_nest_keys_close_trace_mr_would_misread():
+    """close_trace_mr.py reads issue-tracking.yaml line by line; these names inside the block would shadow the real ones."""
+    setup = SETUP_SKILL.read_text(encoding="utf-8")
+    block = setup[setup.index("openproject:\n"):]
+    block = block[: block.index("```")]
+    assert not re.search(r"^\s+(platform|host|project|git_platform|git_host|git_project):", block, flags=re.M)

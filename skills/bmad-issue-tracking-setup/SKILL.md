@@ -11,6 +11,7 @@ One-time setup for BMAD Issue Tracking integration. Deploys TOML overrides to `_
 
 - BMAD Method module (BMM) 6.12.0+ installed
 - `uv` available (required by BMM 6.12.0+ skills; the workflow YAMLs invoke Python via `uv run python`)
+- For OpenProject as the issue tracker: an OpenProject MCP server (`openproject-mcp`) registered for the project, with a version that provides `list_statuses` and the `subject` / `all_statuses` / `parent_id` options (step 7b verifies this)
 - This module installed via the new Skills-as-modules installer (manifest `module = "issue-tracking"`, version ≥3.0.0).
 
 ## Instructions
@@ -254,7 +255,7 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
     ```yaml
     issue_tracking:
       enabled: true
-      platform: gitlab  # or github — configure in next step
+      platform: gitlab  # gitlab, github or openproject — configure in next step
       # worktree_base, host, project configured in steps 4-5
     ```
   </false>
@@ -281,7 +282,7 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
     <output>Platform already configured: {platform}.</output>
   </true>
   <false>
-    <action>Ask the user which platform they use for issue tracking: GitLab or GitHub.</action>
+    <action>Ask the user which platform they use for issue tracking: GitLab, GitHub or OpenProject.</action>
     <action>Set `issue_tracking.platform` to the chosen value.</action>
   </false>
 </check>
@@ -293,8 +294,11 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
     <action>Set `issue_tracking.git_platform` to the git remote platform in `_bmad/custom/issue-tracking.yaml`.</action>
   </false>
 </check>
+<check if="platform is openproject">
+  <output>NOTE: OpenProject only tracks the work (PRDs, epics, stories and retrospectives become work packages). Branches, MRs/PRs and CI stay on the git remote ({git_platform}), so `git_platform`, `git_host` and `git_project` are required.</output>
+</check>
 <check if="platform differs from git remote platform">
-  <output>NOTE: The issue tracker ({platform}) differs from the git remote ({git_platform}). This is valid — e.g. code on GitLab but issues on GitHub. MRs/PRs will target the git remote, so `git_host` and `git_project` are also needed.</output>
+  <output>NOTE: The issue tracker ({platform}) differs from the git remote ({git_platform}). This is valid — e.g. code on GitLab but issues on GitHub, or issues in OpenProject. MRs/PRs will target the git remote, so `git_host` and `git_project` are also needed.</output>
   <check if="git_host is already set">
     <true>
       <output>git_host already configured: {git_host}.</output>
@@ -327,7 +331,7 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
     <output>host already configured: {host}.</output>
   </true>
   <false>
-    <action>Ask the user for the issue tracker host (e.g. `gitlab.company.com` or `github.com`). Set `issue_tracking.host` in `_bmad/custom/issue-tracking.yaml`.</action>
+    <action>Ask the user for the issue tracker host (e.g. `gitlab.company.com` or `github.com`; for OpenProject the hostname without scheme, e.g. `openproject.company.com`). Set `issue_tracking.host` in `_bmad/custom/issue-tracking.yaml`.</action>
   </false>
 </check>
 <check if="project is already set">
@@ -335,15 +339,90 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
     <output>project already configured: {project}.</output>
   </true>
   <false>
-    <action>Ask the user for the issue tracker project path (e.g. `my-group/my-project`). Set `issue_tracking.project` in `_bmad/custom/issue-tracking.yaml`.</action>
+    <check if="platform is openproject">
+      <true>
+        <output>The OpenProject project is chosen from a list in step 7b.</output>
+      </true>
+      <false>
+        <action>Ask the user for the issue tracker project path (e.g. `my-group/my-project`). Set `issue_tracking.project` in `_bmad/custom/issue-tracking.yaml`.</action>
+      </false>
+    </check>
   </false>
 </check>
 </step>
 
+<step n="7b" goal="Configure OpenProject (only when platform is openproject)">
+<check if="platform is NOT openproject">
+  <action>Skip this step.</action>
+</check>
+<check if="platform is openproject">
+  <action>Ask the user for the name of the MCP server that exposes the OpenProject tools. Default: `open-project` (its tools are called `mcp__<server>__<tool>`). Set `issue_tracking.openproject.mcp_server` to the answer.</action>
+  <action>Call `mcp__{mcp_server}__who_am_i` to verify the server is connected and authenticated.</action>
+  <check if="the tool is not available or the call fails">
+    <output>The OpenProject MCP server '{mcp_server}' is not available in this session. Register it for this project by adding it to `.mcp.json` (the token is read from your environment, so it is not committed):
+
+    {
+      "mcpServers": {
+        "{mcp_server}": {
+          "command": "uvx",
+          "args": ["--from", "git+https://github.com/espace/openproject-mcp", "openproject-mcp"],
+          "env": {
+            "OPENPROJECT_URL": "https://<your-openproject-host>",
+            "OPENPROJECT_TOKEN": "${OPENPROJECT_TOKEN}"
+          }
+        }
+      }
+    }
+
+    Unattended runs (bmad-loop) need the server as well, which is why project scope (`.mcp.json`) is preferred over user scope. Set OPENPROJECT_TOKEN to an OpenProject API token, open a new session and re-run /bmad-issue-tracking-setup.</output>
+    <action>Set `issue_tracking.enabled: false` (issue tracking stays in file-system mode until setup is re-run). Do NOT write the `issue_tracking.openproject` block. End this step.</action>
+  </check>
+  <action>Call `mcp__{mcp_server}__list_statuses`. If the tool does not exist, the MCP server is too old: tell the user to update openproject-mcp (this module needs `list_statuses` and the `subject`, `all_statuses` and `parent_id` options), set `issue_tracking.enabled: false`, and end this step.</action>
+
+  <action>Call `mcp__{mcp_server}__list_projects`, show each project's id and name, and ask the user which project holds the BMAD work packages. Set `issue_tracking.project` to that project's id, written as a quoted string (e.g. `project: "123"`).</action>
+
+  <action>Call `mcp__{mcp_server}__list_work_package_types`, show id and name, and ask which type to use for each BMAD item: `prd`, `epic`, `story`, `retrospective`. Suggest the closest names (for example an Epic type for `epic`, a User story or Feature type for `story`, a Task for `retrospective`) and wait for the answer. Every kind needs a type.</action>
+
+  <action>Show the statuses from `list_statuses` (id, name, and whether OpenProject treats the status as closed). Ask which status to use for each BMAD status: `backlog`, `ready-for-dev`, `in-progress`, `review`, `awaiting-operator`, `done`, `deferred`, `optional`, `closed`. Suggest by name (New for backlog, In progress for in-progress, a closed status for done and closed) and wait for the answer. A BMAD status may be left unmapped: the sync then leaves that work package's status unchanged and warns.</action>
+  <check if="the status chosen for `done` or `closed` is not marked closed in OpenProject">
+    <output>WARN: '{status_name}' is not a closed status in OpenProject, so work packages mapped to BMAD '{bmad_status}' will not show as closed. Choose a closed status, or continue knowing they stay open.</output>
+  </check>
+
+  <action>Write the mapping under `issue_tracking` in `_bmad/custom/issue-tracking.yaml`. Write every key, using an empty string for an unmapped status, and quote the ids:</action>
+
+  ```yaml
+  issue_tracking:
+    openproject:
+      mcp_server: open-project
+      type_ids:
+        prd: "7"
+        epic: "7"
+        story: "8"
+        retrospective: "3"
+      status_ids:
+        backlog: "1"
+        ready-for-dev: "2"
+        in-progress: "7"
+        review: "8"
+        awaiting-operator: "4"
+        done: "12"
+        deferred: ""
+        optional: ""
+        closed: "12"
+  ```
+
+  <action>Never add a key named `platform`, `host` or `project` inside the `openproject` block: tools that read this file line by line (the close-trace-mr plugin) would confuse it with the top-level keys.</action>
+  <action>Set `issue_tracking.enabled: true`.</action>
+  <output>Reminder: OpenProject only accepts status changes that its workflow allows for the type and role. Use an account (the MCP's API token) that may move work packages between these statuses, or the sync will stop at the first status OpenProject rejects.</output>
+</check>
+</step>
+
 <step n="8" goal="Verify CLI connectivity">
-<action>Run the platform auth check (use `--hostname {host}` for self-hosted instances):</action>
-- GitLab: `glab auth status --hostname {host}`
-- GitHub: `gh auth status --hostname {host}`
+<action>Run the auth check for each platform that has a CLI (use `--hostname` for self-hosted instances):</action>
+- Issue tracker on GitLab: `glab auth status --hostname {host}`
+- Issue tracker on GitHub: `gh auth status --hostname {host}`
+- Git remote (MRs/PRs and CI) when it differs from the issue tracker, which is always the case for OpenProject: `glab auth status --hostname {git_host}` when `git_platform` is gitlab, `gh auth status --hostname {git_host}` when it is github
+- OpenProject: no CLI — its connection was verified with the MCP `who_am_i` call in step 7b
 
 <check if="auth fails">
   <output>WARN: CLI not authenticated. Issue tracking will fall back to file-system until authenticated.</output>
@@ -371,14 +450,16 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
 ```yaml
 issue_tracking:
   enabled: true
-  platform: <platform>
+  platform: <platform>  # gitlab, github or openproject
   git_platform: <git_platform>  # git remote platform (same as platform in nominal case)
   host: <host>
-  project: <project>
+  project: <project>  # for openproject: the OpenProject project id, quoted
   worktree_base: <configured_worktree_base>
-  # Only present when git remote differs from issue tracker:
+  # Only present when git remote differs from issue tracker (always for openproject):
   # git_host: <git_hostname>
   # git_project: <git_group>/<git_project>
+  # Only present when platform is openproject (written in step 7b): the `openproject:` block
+  # with mcp_server, type_ids and status_ids.
   branch_patterns:
     prd: "<resolved PRD pattern>"
     story: "<resolved story pattern>"

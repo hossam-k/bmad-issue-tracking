@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-BMAD module that integrates sprint tracking with GitLab/GitHub Issues. It's not a runnable application — it's a set of TOML overrides and Skills-as-modules folders consumed by the new BMad installer (each `<skill>/module-manifest.toml` declares `module = "issue-tracking"`).
+BMAD module that integrates sprint tracking with GitLab/GitHub Issues or OpenProject work packages. It's not a runnable application — it's a set of TOML overrides and Skills-as-modules folders consumed by the new BMad installer (each `<skill>/module-manifest.toml` declares `module = "issue-tracking"`).
 
 Requires BMM 6.12.0+ (the flat per-skill install layout `_bmad/{method,toolbox,...}/` replaces the legacy `_bmad/{bmm,bmb,cis,core}/` subdirectories from 6.12.0 onward; BMad adopted the Skills-as-modules format with this version).
 
@@ -51,7 +51,7 @@ TOML instructions reference these placeholders — they are NOT config variables
 
 ## Issue title formats
 
-All workflows that create issues use these title formats. They must stay consistent — `create-issue.yaml` searches by title to avoid duplicates.
+All workflows that create issues use these title formats. They must stay consistent — `create-issue.yaml` searches by title to avoid duplicates, and the OpenProject adapter's `parse-ref` derives the work package kind, epic number and parent from them.
 
 | Type | Format | Set by |
 |------|--------|--------|
@@ -98,7 +98,32 @@ Projects using [`bmad-loop`](https://github.com/bmad-code-org/bmad-loop) bypass 
 - GitHub: `gh` CLI, labels use `:` separator, `gh issue edit --add-label`/`--remove-label` for label updates (preserves other labels)
 - `glab api` uses `--hostname`; `glab mr`/`glab label` use `-R`; `gh` uses `-R` with format `[HOST/]OWNER/REPO`
 
-**Git remote vs issue tracker:** The git remote (origin) and issue tracker can be on different platforms (e.g., code on GitLab, issues on GitHub). `issue_tracking.platform` is the issue tracker; `issue_tracking.git_platform` (set during setup) is the git remote. Issue operations (create/update/close issues, labels, comments) use `platform`. MR/PR operations (list, create, merge, mark ready) use `git_platform`. When they differ, `host`/`project` apply to the issue tracker and `git_host`/`git_project` apply to the git remote. Issue references in MR descriptions use `Closes #X` for same-platform, full URL for cross-platform.
+- OpenProject: no CLI — reached through MCP tool calls (`TOOL` steps). No labels: type and status are native work package fields (ids from config), the PRD → Epic → Story tree is the parent link, and `{sep}` is `:` only so string comparisons stay defined. `issue_id` is the work package id. Closed state follows the status (map `done`/`closed` to closed statuses).
+
+**Git remote vs issue tracker:** The git remote (origin) and issue tracker can be on different platforms (e.g., code on GitLab, issues on GitHub). `issue_tracking.platform` is the issue tracker; `issue_tracking.git_platform` (set during setup) is the git remote. Issue operations (create/update/close issues, labels, comments) use `platform`. MR/PR operations (list, create, merge, mark ready) and CI use `git_platform`. When they differ, `host`/`project` apply to the issue tracker and `git_host`/`git_project` apply to the git remote — always the case for OpenProject, which has no MRs. Issue references in MR descriptions come from `common/resolve-issue-ref`: `Closes #X` / `Related to #X` for same-platform, a full URL across GitLab/GitHub, and `Related to OP#X (url)` for OpenProject (OpenProject links the PR/MR to the work package but does not close it from a keyword).
+
+**Never gate an MR/PR/CI command on `PLATFORM:`** — that field selects on the issue tracker, so with `platform: openproject` the step silently never runs. Use `GIT_PLATFORM:` (see the language spec §2.4). Get the git remote's coordinates from `common/resolve-mr-repo` (`mr_repo`, `mr_host`, `mr_project`, `mr_project_enc`); never write `mr_repo` by hand. `test_git_remote_routing.py` enforces all of this.
+
+## Tracker adapters (OpenProject)
+
+`platform` selects the issue tracker. The issue atomics in `common/` (`find-issue`, `create-issue`, `update-issue-status`, `update-issue-description`, `post-issue-comment`) start with:
+
+```yaml
+- CHECK: platform eq "openproject"
+  TRUE:
+    - INCLUDE: trackers/openproject/<same-name>
+    - STOP
+```
+
+`STOP` in an included sub-workflow returns to its caller (language spec §2.10), so the GitLab/GitHub steps below it are untouched. `create-label`, `ensure-labels`, `ensure-dynamic-labels` and `ensure-board` are no-ops for OpenProject.
+
+- **MCP tools only in `trackers/`.** `TOOL` steps appear only in `trackers/<tool>/`, with `SERVER: "{op_mcp_server}"` (never a literal name). `test_openproject_adapter.py` checks every tool and argument name against the real openproject-mcp signatures when the checkout is next to this repo (`OPENPROJECT_MCP_DIR` overrides the path). The adapter needs the `list_work_packages` options `subject`, `all_statuses` and `parent_id`, and the `list_statuses` tool, from openproject-mcp.
+- **Failures stop the workflow** (`ON_ERROR: stop`), like a non-zero `glab`/`gh` exit — OpenProject is the system of record, so a silent miss followed by a create could duplicate work packages. The one exception is `post-issue-comment` (`warn`), which is best-effort on every platform.
+- **Titles drive the lookup.** `parse-ref` turns a title or sprint key into kind, epic number and subject prefix; `find-wp` scopes the search through the parent tree (PRD → Epic → Story/Retrospective), so the **issue title formats below must stay stable**. The sprint key lives in the description, which is not searchable, so it is never used to find a work package.
+- **Config:** `issue_tracking.openproject.{mcp_server,type_ids,status_ids}`, written by setup step 7b, loaded by `trackers/openproject/load-config`. Do not nest keys named `platform`, `host` or `project` in that block (`close_trace_mr.py` parses the file line by line).
+- **Status comparison:** `get-issue-status` returns `status{sep}<mapped_status>` when the work package already has the mapped status and `status{sep}other` otherwise, so `sync-issues` compares it exactly as it does a GitLab/GitHub label.
+
+**Adding another tracker** (e.g. Jira): create `trackers/<name>/` implementing the five operations (`find-issue`, `create-issue`, `update-issue-status`, `update-issue-description`, `post-issue-comment`) plus whatever lookup helpers it needs, each with the four-line header (add `get-issue-status` for the `sync-issues` status read); add one `platform eq "<name>"` dispatch per atomic above (and to `sync-issues` for the status read); extend `check-config`; add the files to the setup skill's verify list; and extend `test_openproject_adapter.py` for the new folder. Tracker adapters never touch `glab`/`gh`.
 
 ## Files to update when adding a new BMM workflow override
 
@@ -144,10 +169,14 @@ have caught real defects:
   `Side effects: none`). Four MR atomics shipped without it and left the suite red; only
   the first was ever reported, because `assert` aborts the test on the first failure.
 
+## Test-parser limitations to know before writing step tests
+
+`tests/conftest.py` parses workflow steps with a line-based regex, not a YAML parser. It does not see a bare `- STOP` (no colon), and a python `else:` line inside a `python -c` body is read as a YAML field, which truncates `raw_value`. Tests that need those read the raw lines instead (`branch_text` / `run_step_lines` in `test_openproject_adapter.py`).
+
 ## Adding or removing a workflow file
 
 `skills/bmad-issue-tracking-setup/SKILL.md` carries an explicit per-file verify list
-(~lines 88-142) of every file the setup step must have copied. Adding
+(~lines 88-150) of every file the setup step must have copied; `test_setup_verify_list.py` fails when a workflow file is missing from it. Adding
 `common/post-build-dispatch-auto.yaml` required adding it there; forgetting leaves the
 installer green while the file is missing in the consumer.
 

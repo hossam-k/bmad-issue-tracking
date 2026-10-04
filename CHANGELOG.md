@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **OpenProject as the issue tracker.** `platform: openproject` mirrors PRDs, epics, stories and retrospectives to OpenProject work packages (PRD → Epic → Story/Retrospective parent tree; type and status are native fields mapped by id in `issue_tracking.openproject`). Code, branches, MRs/PRs and CI stay on the git remote (`git_platform`: GitLab or GitHub). The shared issue atomics (`find-issue`, `create-issue`, `update-issue-status`, `update-issue-description`, `post-issue-comment`) delegate to `workflows/trackers/openproject/`; GitLab/GitHub behavior is unchanged. Requires an `openproject-mcp` with `list_statuses` and the `subject` / `all_statuses` / `parent_id` options.
+- **`TOOL` workflow step** (language spec 1.1): calls an MCP tool and stores the result (`SERVER`, `ARGS`, `STORE`, `ON_ERROR`). Used only by tracker adapters.
+- **`GIT_PLATFORM:` field on `RUN` steps**: selects a step by the git remote instead of the issue tracker.
+- `common/resolve-mr-repo` (git remote coordinates: `mr_repo`, `mr_host`, `mr_project`, `mr_project_enc`) and `common/resolve-issue-ref` (`#N`, issue URL or `OP#N` for MR/PR descriptions).
+- Setup step 7b: verifies the OpenProject MCP, picks the project, and maps work package types and statuses.
+- Tests: `test_openproject_adapter.py` (dispatch, MCP tool/argument names checked against the real server, embedded Python executed), `test_git_remote_routing.py`, `test_setup_verify_list.py`.
+
+### Changed
+
+- MR/PR and CI steps (`find-mr`, `get-mr-pipeline`, `get-failed-jobs`, `merge-mr`, `wait-for-green-ci`) now select on `git_platform` instead of the issue tracker, and read the git remote's coordinates from `common/resolve-mr-repo`. `post-dev-complete`, `bmad-prd` and `create-prd` use the two new helpers instead of hard-coded or duplicated blocks. With the tracker and git remote on different platforms these steps previously used the tracker's host and project.
+- `close-trace-mr` closes the trace MR/PR on the git remote when `git_platform` differs from `platform` (as its README already described).
+
+### Fixed
+
+- `merge-mr`: the GitHub merge-SHA lookup used `repos/{host}/{project}/pulls/…` (host inside the API path); it now uses `repos/{owner/repo}/pulls/… --hostname {host}`. The merge step also used an `neq` operator that the language does not define; it no longer branches on platform equality.
+- `sync-issues`: a newly created issue that is closed right away (`done`/`closed`) ran `update-issue-status` without `new_status` and `close` set, so it used a stale or undefined value.
+- The setup skill's verify list did not name `find-mr`, `merge-mr`, `get-mr-pipeline` or `get-failed-jobs`.
+
 ## [3.0.0] - 2026-09-15
 
 [compare v2.2.0...v3.0.0](https://github.com/jrevillard/bmad-issue-tracking/compare/v2.2.0...v3.0.0)
@@ -246,6 +268,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bmad-bmm-issue-link` skill (obsolete, sync task handles MR creation)
 - Known issue workaround for git branch naming conflict (fixed by PRD pattern change)
 
+[Unreleased]: https://github.com/jrevillard/bmad-issue-tracking/compare/v3.0.0...HEAD
 [3.0.0]: https://github.com/jrevillard/bmad-issue-tracking/compare/v2.2.0...v3.0.0
 [1.3.0]: https://github.com/jrevillard/bmad-issue-tracking/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/jrevillard/bmad-issue-tracking/compare/v1.1.1...v1.2.0
