@@ -7,21 +7,15 @@
 #   - platform: issue tracker platform (from check-config)
 #   - host: issue tracker host (from check-config)
 #   - project: issue tracker project (from check-config)
+#   - project_enc: URL-encoded project path (from check-config)
 # Output variables:
+#   - mr_repo, mr_host, mr_project, mr_project_enc: git remote coordinates (from common/resolve-mr-repo)
 #   - ci_status: "passed", "failed", "running", "no_ci", "no_mr"
 # Side effects: none
 
-# Resolve MR/PR repo (handles cross-platform: git remote may differ from issue tracker)
-- CHECK: git_platform eq platform
-  TRUE:
-    - SET: { variable: mr_repo, value: "{host}/{project}" }
-  FALSE:
-    - READ: _bmad/custom/issue-tracking.yaml
-      EXTRACT:
-        git_host: issue_tracking.git_host
-        git_project: issue_tracking.git_project
-    - SET: { variable: mr_repo, value: "{git_host}/{git_project}" }
-# Find the MR + fetch its latest pipeline. Atomics self-route via PLATFORM.
+# Resolve where the MR/PR and CI live (git remote; may differ from the issue tracker)
+- INCLUDE: common/resolve-mr-repo
+# Find the MR + fetch its latest pipeline. Atomics self-route via GIT_PLATFORM.
 # Note: get-mr-pipeline's GitHub side uses `gh run list` (workflow-run-level) rather
 # than the previous `gh pr checks` (per-check aggregation) — a known semantic shift
 # acknowledged in the plan's out-of-scope section ("both coexist" as concepts).

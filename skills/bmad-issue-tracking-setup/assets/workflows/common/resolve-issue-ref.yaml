@@ -1,0 +1,32 @@
+# common/resolve-issue-ref.yaml
+#
+# Purpose: Builds the text an MR/PR description uses to reference the tracked issue.
+#          Same platform: "{verb} #N" (the git host links and, for "Closes", closes it).
+#          GitLab <-> GitHub: a full issue URL, always "Related to" (closing keywords do
+#          not work across hosts). OpenProject: "OP#N" plus the work package URL, always
+#          "Related to" (OpenProject links the PR/MR to the work package but does not
+#          close it from a keyword).
+# Input variables:
+#   - issue_id: the issue id (GitLab iid, GitHub number, OpenProject work package id)
+#   - issue_ref_verb: "Closes" or "Related to" (used only for same-platform references)
+#   - platform: issue tracker platform (from check-config)
+#   - git_platform: git remote platform (from check-config)
+#   - host: issue tracker host (from check-config)
+#   - project: issue tracker project (from check-config)
+# Output variables:
+#   - issue_ref: the reference line to put in the MR/PR description
+# Side effects: none
+
+- CHECK: platform eq "openproject"
+  TRUE:
+    - SET: { variable: issue_ref, value: "Related to OP#{issue_id} (https://{host}/work_packages/{issue_id})" }
+  FALSE:
+    - CHECK: git_platform eq platform
+      TRUE:
+        - SET: { variable: issue_ref, value: "{issue_ref_verb} #{issue_id}" }
+      FALSE:
+        - CHECK: platform eq "gitlab"
+          TRUE:
+            - SET: { variable: issue_ref, value: "Related to https://{host}/{project}/-/issues/{issue_id}" }
+          FALSE:
+            - SET: { variable: issue_ref, value: "Related to https://{host}/{project}/issues/{issue_id}" }

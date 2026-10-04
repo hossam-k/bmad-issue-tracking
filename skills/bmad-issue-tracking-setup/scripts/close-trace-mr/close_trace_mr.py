@@ -60,7 +60,7 @@ class Ctx:
     `close_trace_mr` flag is the master switch from the manifest's settings.
     """
 
-    platform: str       # "gitlab" | "github"
+    platform: str       # git remote platform: "gitlab" | "github"
     host: str           # "gitlab.example.com" | "github.com" | ""
     project: str        # "group/sub/repo" | "owner/repo"
     branch: str         # the source branch the trace MR targets
@@ -140,12 +140,12 @@ def get_env_values(env: Mapping[str, str] | None = None) -> dict[str, str]:
 # it raises ConfigParseError on truly broken input so the operator gets a
 # useful message rather than a silent empty result.
 
-_CONFIG_KEYS = frozenset({"platform", "host", "project", "git_host", "git_project"})
+_CONFIG_KEYS = frozenset({"platform", "host", "project", "git_platform", "git_host", "git_project"})
 
 # Captures `key: value` where key is one of the names we care about, value
 # can be a bare word or a quoted string. Tolerant of trailing comments.
 _LINE_RE = re.compile(
-    r"^\s*(?P<key>platform|host|project|git_host|git_project)\s*:\s*"
+    r"^\s*(?P<key>platform|host|project|git_platform|git_host|git_project)\s*:\s*"
     r"(?:\"(?P<dq>[^\"]*)\"|'(?P<sq>[^']*)'|(?P<bare>[^#\s][^#]*?))\s*(?:#.*)?$"
 )
 
@@ -199,16 +199,28 @@ def resolve_ctx(env_values: Mapping[str, str], config: Mapping[str, str]) -> Ctx
     inferred — i.e. when there is genuinely no tracker to talk to. The caller
     must treat None as "no-op, log to stderr, exit 0".
     """
-    platform = env_values.get("platform_override", "") or config.get("platform", "")
+    env_platform = env_values.get("platform_override", "")
+    platform = env_platform or config.get("platform", "")
     host = env_values.get("host_override", "") or config.get("host", "")
     project = env_values.get("project_override", "") or config.get("project", "")
+    # The trace MR/PR lives on the git remote, not on the issue tracker. When the config
+    # names a git_platform that differs from the tracker (always the case for a tracker
+    # with no MRs, e.g. openproject), resolve the git_* keys instead. An explicit operator
+    # override of the platform still wins.
+    tracker = config.get("platform", "").strip().lower()
+    git_platform = config.get("git_platform", "").strip().lower()
+    if not env_platform and tracker and git_platform and git_platform != tracker:
+        platform = git_platform
+        host = env_values.get("host_override", "") or config.get("git_host", "")
+        project = env_values.get("project_override", "") or config.get("git_project", "")
     if not platform:
         return None
     platform = platform.strip().lower()
     if platform not in PLATFORMS:
         # Operator put garbage in their config — fail loudly so they fix it.
         raise ConfigParseError(
-            f"unsupported platform {platform!r}; expected one of {PLATFORMS}"
+            f"unsupported platform {platform!r}; expected one of {PLATFORMS} "
+            f"(set git_platform/git_host/git_project when the issue tracker has no MRs)"
         )
     # GitHub uses api.github.com; host may legitimately be empty. For GitLab,
     # host is required (gitlab.com is the SaaS default).

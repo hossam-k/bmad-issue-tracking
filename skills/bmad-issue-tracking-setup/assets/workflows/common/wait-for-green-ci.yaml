@@ -9,7 +9,7 @@
 #   - host: issue tracker host (from check-config)
 #   - project: issue tracker project (from check-config)
 #   - project_enc: URL-encoded project path (from check-config)
-#   - mr_repo: resolved MR repo (set by check-mr-ci)
+#   - mr_repo, mr_host, mr_project_enc: git remote coordinates (set by check-mr-ci via common/resolve-mr-repo)
 #   - source_branch: source branch (set by check-mr-ci, defaults to current_branch)
 # Output variables:
 #   - ci_status: "passed", "no_ci", "no_mr", "running", "failed", "timeout"
@@ -46,7 +46,7 @@
               sleep 30
               attempt=$((attempt + 1))
               # get-mr-pipeline equivalent: fetch latest pipeline for the existing mr_iid
-              raw=$(glab api "projects/{project_enc}/merge_requests/{mr_iid}/pipelines" --hostname {host} --paginate 2>/dev/null)
+              raw=$(glab api "projects/{mr_project_enc}/merge_requests/{mr_iid}/pipelines" --hostname {mr_host} --paginate 2>/dev/null)
               pipeline_status=$(echo "$raw" | uv run --no-project python -c "
 import json, sys
 ps = json.load(sys.stdin)
@@ -72,7 +72,7 @@ else:
             if [ $attempt -ge $max_attempts ]; then
               echo "timeout"
             fi
-          PLATFORM: gitlab
+          GIT_PLATFORM: gitlab
           STORE: ci_status
       FALSE:
         - CHECK: git_platform eq "github"
@@ -110,7 +110,7 @@ else:
                 if [ $attempt -ge $max_attempts ]; then
                   echo "timeout"
                 fi
-              PLATFORM: github
+              GIT_PLATFORM: github
               STORE: ci_status
 # After polling — check if passed or failed
 - CHECK: ci_status eq "passed"
@@ -132,12 +132,12 @@ else:
   TRUE:
     - CHECK: git_platform eq "gitlab"
       TRUE:
-        - RUN: glab api "projects/{project_enc}/merge_requests/{mr_iid}/pipelines" --hostname {host} --paginate | uv run --no-project python -c "
+        - RUN: glab api "projects/{mr_project_enc}/merge_requests/{mr_iid}/pipelines" --hostname {mr_host} --paginate | uv run --no-project python -c "
 import json, sys
 ps = json.load(sys.stdin)
 print(str(ps[0]['id']) if ps else '')
 "
-          PLATFORM: gitlab
+          GIT_PLATFORM: gitlab
           STORE: pipeline_id
       FALSE:
         - RUN: gh run list --limit 1 -R "{mr_repo}" --json databaseId | uv run --no-project python -c "
@@ -145,7 +145,7 @@ import json, sys
 rs = json.load(sys.stdin)
 print(str(rs[0]['databaseId']) if rs else '')
 "
-          PLATFORM: github
+          GIT_PLATFORM: github
           STORE: pipeline_id
     - INCLUDE: common/get-failed-jobs
     - OUTPUT:
