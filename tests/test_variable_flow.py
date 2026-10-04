@@ -173,7 +173,7 @@ class TestOutputVariablesUsed:
     def test_non_common_outputs_used(self, all_workflows):
         """Non-common workflow files should reference their INCLUDE outputs."""
         for rel, wf in all_workflows.items():
-            if rel.startswith("common/"):
+            if rel.startswith(("common/", "trackers/")):
                 continue
             contract_lines = wf["content"].split("\n")
             outputs = []

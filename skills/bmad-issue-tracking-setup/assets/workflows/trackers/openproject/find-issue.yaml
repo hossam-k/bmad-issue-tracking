@@ -1,0 +1,17 @@
+# trackers/openproject/find-issue.yaml
+#
+# Purpose: OpenProject implementation of common/find-issue — finds the work package for a
+#          title or sprint key, scoped to the PRD's work package tree.
+# Input variables:
+#   - search_text: a title ("Story 1.3: Login Form", "PRD: x") or sprint key ("1-3-login-form", "epic-1")
+#   - prd_key: the PRD key
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables:
+#   - issue_id: the work package id; empty string if not found
+# Side effects: none
+
+- INCLUDE: trackers/openproject/load-config
+- SET: { variable: ref_text, value: "{search_text}" }
+- INCLUDE: trackers/openproject/parse-ref
+- INCLUDE: trackers/openproject/find-wp
+- SET: { variable: issue_id, value: "{op_wp_id}" }

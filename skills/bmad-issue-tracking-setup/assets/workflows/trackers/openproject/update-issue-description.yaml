@@ -1,0 +1,19 @@
+# trackers/openproject/update-issue-description.yaml
+#
+# Purpose: OpenProject implementation of common/update-issue-description — replaces the work package
+#          description with the contents of a file, then removes that file (as the GitLab/GitHub
+#          path does).
+# Input variables:
+#   - issue_id: the work package id
+#   - description_file: path to the file holding the new description (markdown)
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables: (none)
+# Side effects: updates the work package description in OpenProject; removes description_file
+
+- INCLUDE: trackers/openproject/load-config
+- READ: {description_file}
+  STORE: op_description
+- TOOL: update_work_package
+  SERVER: "{op_mcp_server}"
+  ARGS: { work_package_id: "{issue_id}", project_id: "{project}", description: "{op_description}" }
+- RUN: rm -f {description_file}

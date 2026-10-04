@@ -6,8 +6,15 @@
 #   - search_text: text to search for in the issue (e.g. "{story_key}", "PRD: {prd_key}", "Epic {epic_num}:")
 #   - prd_key: the PRD key (from scope, for label scoping)
 # Output variables:
-#   - issue_id: the issue IID (GitLab) or number (GitHub); empty string if not found
+#   - issue_id: the issue IID (GitLab), number (GitHub) or work package id (OpenProject); empty string if not found
 # Side effects: none
+
+# OpenProject tracks work packages, not issues and labels: delegate to the tracker adapter,
+# then STOP to return to the caller (the GitLab/GitHub steps below do not apply).
+- CHECK: platform eq "openproject"
+  TRUE:
+    - INCLUDE: trackers/openproject/find-issue
+    - STOP
 
 - RUN: glab api "projects/{project_enc}/issues?search={search_text}&labels=prd{sep}{prd_key}" --hostname {host} --paginate
   STORE: issue_result

@@ -2,7 +2,8 @@
 #
 # Purpose: Syncs sprint-status.yaml entries to the issue tracker.
 #           Single pass: fetches all PRD issues, then creates missing or updates
-#           status for each entry. Tracks created/updated/skipped counts.
+#           status for each entry. Tracks created/updated/skipped counts. On OpenProject the
+#           issues are work packages and the status is a native field, not a label.
 # Input variables: (none — uses platform, host, project, sep, prd_key, branch_patterns from scope)
 # Output variables:
 #   - sync_created: number of issues created
@@ -164,20 +165,24 @@ else:
       - CHECK: empty issue_id
         FALSE:
           # Found — check status
-          - CHECK: platform eq "gitlab"
+          - CHECK: platform eq "openproject"
             TRUE:
-              - RUN: glab api "projects/{project_enc}/issues/{issue_id}" --hostname {host} | uv run --no-project python -c "
+              - INCLUDE: trackers/openproject/get-issue-status
+            FALSE:
+              - CHECK: platform eq "gitlab"
+                TRUE:
+                  - RUN: glab api "projects/{project_enc}/issues/{issue_id}" --hostname {host} | uv run --no-project python -c "
 import json, sys
 for l in json.load(sys.stdin)['labels']:
     if l.startswith('status'):
         print(l)
 "
-                  STORE: current_status_label
-                  PLATFORM: gitlab
-              FALSE:
-                - RUN: gh api "repos/{project}/issues/{issue_id}" --hostname {host} --jq '[.labels[] | select(.name | startswith("status:")) | .name][0] // "none"'
-                  STORE: current_status_label
-                  PLATFORM: github
+                      STORE: current_status_label
+                      PLATFORM: gitlab
+                  FALSE:
+                    - RUN: gh api "repos/{project}/issues/{issue_id}" --hostname {host} --jq '[.labels[] | select(.name | startswith("status:")) | .name][0] // "none"'
+                      STORE: current_status_label
+                      PLATFORM: github
           # Body reconciliation is intentionally absent here. This flow mirrors
           # sprint-status.yaml to STATUS LABELS only — common/update-issue-description
           # is invoked by the workflow complete.yaml flows (bmad-prd, edit-prd,

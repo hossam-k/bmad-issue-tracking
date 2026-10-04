@@ -1,11 +1,15 @@
-"""Validate that common/ sub-workflows have proper contract headers.
+"""Validate that common/ and trackers/ sub-workflows have proper contract headers.
 
-P1 — checks that common/ files document their Purpose, Input variables,
+P1 — checks that common/ and trackers/ files document their Purpose, Input variables,
 Output variables, and Side effects.
 """
 
 import pytest
 from conftest import load_all_workflows, parse_contract_header
+
+
+# Sub-workflows INCLUDEd by other workflows; each documents its contract in a header.
+SUBWORKFLOW_DIRS = ("common/", "trackers/")
 
 
 class TestIncludeContracts:
@@ -14,7 +18,7 @@ class TestIncludeContracts:
     def test_common_subworkflows_have_purpose(self, all_workflows):
         """All common/ files must document their Purpose."""
         for rel, wf in all_workflows.items():
-            if not rel.startswith("common/"):
+            if not rel.startswith(SUBWORKFLOW_DIRS):
                 continue
             contract = parse_contract_header(wf["content"])
             assert contract["purpose"], f"{rel}: missing Purpose in contract header"
@@ -22,7 +26,7 @@ class TestIncludeContracts:
     def test_common_subworkflows_have_input_variables(self, all_workflows):
         """All common/ files must document their Input variables (even if none)."""
         for rel, wf in all_workflows.items():
-            if not rel.startswith("common/"):
+            if not rel.startswith(SUBWORKFLOW_DIRS):
                 continue
             contract = parse_contract_header(wf["content"])
             # The section header should exist, even if empty
@@ -34,7 +38,7 @@ class TestIncludeContracts:
     def test_common_subworkflows_have_output_variables(self, all_workflows):
         """All common/ files must document their Output variables (even if none)."""
         for rel, wf in all_workflows.items():
-            if not rel.startswith("common/"):
+            if not rel.startswith(SUBWORKFLOW_DIRS):
                 continue
             content_lower = wf["content"].lower()
             assert "output variables" in content_lower, (
@@ -44,7 +48,7 @@ class TestIncludeContracts:
     def test_common_subworkflows_have_side_effects(self, all_workflows):
         """All common/ files must document their Side effects."""
         for rel, wf in all_workflows.items():
-            if not rel.startswith("common/"):
+            if not rel.startswith(SUBWORKFLOW_DIRS):
                 continue
             content_lower = wf["content"].lower()
             assert "side effects" in content_lower, (

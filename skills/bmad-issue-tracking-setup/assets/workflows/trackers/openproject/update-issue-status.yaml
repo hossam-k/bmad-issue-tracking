@@ -1,0 +1,25 @@
+# trackers/openproject/update-issue-status.yaml
+#
+# Purpose: OpenProject implementation of common/update-issue-status — sets the work package status
+#          mapped to the BMAD status. OpenProject has no separate open/closed state: whether the
+#          work package is closed follows from its status (map done and closed to closed statuses),
+#          so `close` needs no extra call here.
+# Input variables:
+#   - issue_id: the work package id
+#   - new_status: the BMAD status (e.g. "review", "done", "in-progress")
+#   - close: "true", "false" or "none" (not used: the status decides open/closed)
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables: (none)
+# Side effects: changes the work package status in OpenProject. Skipped with a warning when no
+#               OpenProject status is mapped to new_status.
+
+- SET: { variable: op_status_name, value: "{new_status}" }
+- INCLUDE: trackers/openproject/resolve-status
+- CHECK: empty op_status_id
+  TRUE:
+    - OUTPUT:
+        message: "No OpenProject status is mapped to '{new_status}' (issue_tracking.openproject.status_ids) — work package #{issue_id} left unchanged."
+  FALSE:
+    - TOOL: update_work_package
+      SERVER: "{op_mcp_server}"
+      ARGS: { work_package_id: "{issue_id}", project_id: "{project}", status_id: "{op_status_id}" }

@@ -1,0 +1,36 @@
+# trackers/openproject/get-issue-status.yaml
+#
+# Purpose: Reports whether a work package already has the status a BMAD status maps to, in the
+#          same form the GitLab/GitHub path produces (a "status{sep}<name>" label), so
+#          common/sync-issues compares both the same way.
+# Input variables:
+#   - issue_id: the work package id
+#   - mapped_status: the BMAD status the work package should have
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables:
+#   - current_status_label: "status{sep}<mapped_status>" when the work package already has the
+#                           status mapped to mapped_status, otherwise "status{sep}other"
+# Side effects: none (read-only); writes and removes /tmp/op-wp.json
+
+- SET: { variable: op_status_name, value: "{mapped_status}" }
+- INCLUDE: trackers/openproject/resolve-status
+- TOOL: get_work_package
+  SERVER: "{op_mcp_server}"
+  ARGS: { work_package_id: "{issue_id}", project_id: "{project}" }
+  STORE: op_wp_json
+- WRITE:
+    file: /tmp/op-wp.json
+    content: "{op_wp_json}"
+    mode: overwrite
+- RUN: uv run --no-project python -c "
+import json, sys
+wp = json.load(open(sys.argv[1], encoding='utf-8'))
+st = wp.get('status')
+cur = str(st.get('id', '')) if st else ''
+want = sys.argv[2]
+sep = sys.argv[3]
+name = sys.argv[4]
+print('status' + sep + name if want and cur == want else 'status' + sep + 'other')
+" /tmp/op-wp.json "{op_status_id}" "{sep}" "{mapped_status}"
+  STORE: current_status_label
+- RUN: rm -f /tmp/op-wp.json

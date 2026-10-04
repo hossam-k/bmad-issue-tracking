@@ -6,6 +6,11 @@
 # Output variables: (none)
 # Side effects: creates labels on the issue tracker
 
+# OpenProject has no labels (status and type are native work package fields): nothing to create.
+- CHECK: platform eq "openproject"
+  TRUE:
+    - STOP
+
 # PRD label
 - SET: { variable: label_name, value: "prd{sep}{prd_key}" }
 - INCLUDE: common/create-label

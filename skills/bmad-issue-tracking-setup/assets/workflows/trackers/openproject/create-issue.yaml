@@ -1,0 +1,82 @@
+# trackers/openproject/create-issue.yaml
+#
+# Purpose: OpenProject implementation of common/create-issue — returns the existing work package
+#          for the title, or creates one with the right type, status and parent. The type and the
+#          parent come from the title ("PRD: x", "Epic 1: ...", "Story 1.3: ...",
+#          "Retrospective: Epic 1"); the initial status comes from the status label in `labels`.
+# Input variables:
+#   - title: the work package subject, in one of the canonical title formats
+#   - labels: newline-separated labels; the "status{sep}<status>" entry sets the initial status
+#   - description_file: path to the file holding the description (markdown)
+#   - prd_key: the PRD key
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables:
+#   - issue_id: the work package id (created or found)
+# Side effects: creates a work package in OpenProject if none exists for the title. The PRD is the
+#               root; epics go under the PRD; stories and retrospectives go under their epic (or
+#               under the PRD, with a warning, when the epic work package does not exist yet).
+
+- INCLUDE: trackers/openproject/load-config
+- SET: { variable: ref_text, value: "{title}" }
+- INCLUDE: trackers/openproject/parse-ref
+- INCLUDE: trackers/openproject/find-wp
+- CHECK: empty op_wp_id
+  FALSE:
+    - SET: { variable: issue_id, value: "{op_wp_id}" }
+    - OUTPUT:
+        message: "Work package already exists (#{issue_id}). Skipping creation."
+    - STOP
+# Work package type for this kind of item
+- RUN: uv run --no-project python -c "
+import sys
+ids = dict(zip(['prd', 'epic', 'story', 'retrospective'], sys.argv[2:]))
+print(ids.get(sys.argv[1], ''))
+" "{op_kind}" "{op_type_prd}" "{op_type_epic}" "{op_type_story}" "{op_type_retrospective}"
+  STORE: op_type_id
+- CHECK: empty op_type_id
+  TRUE:
+    - OUTPUT:
+        message: "Cannot create a work package for '{title}': no type is configured for kind '{op_kind}' (issue_tracking.openproject.type_ids), or the title is not in a canonical format (PRD: / Epic N: / Story E.S: / Retrospective: Epic N)."
+        stop: true
+# Initial status, from the status label (empty keeps OpenProject's default status)
+- RUN: uv run --no-project python -c "
+import sys
+want = 'status' + sys.argv[2]
+for line in sys.argv[1].split('\n'):
+    if line.strip().startswith(want):
+        print(line.strip()[len(want):])
+        break
+" "{labels}" "{sep}"
+  STORE: op_status_name
+- INCLUDE: trackers/openproject/resolve-status
+# Parent: PRD for epics; epic for stories and retrospectives, falling back to the PRD
+- SET: { variable: op_parent_id, value: "{op_prd_wp}" }
+- CHECK: op_kind eq "prd"
+  TRUE:
+    - SET: { variable: op_parent_id, value: "" }
+- CHECK: op_kind ne "epic"
+  TRUE:
+    - CHECK: op_kind ne "prd"
+      TRUE:
+        - CHECK: empty op_epic_wp
+          TRUE:
+            - OUTPUT:
+                message: "Epic {op_epic_num} has no work package yet — creating '{title}' under the PRD work package. Run /bmad-issue-tracking-sync once the epic exists."
+          FALSE:
+            - SET: { variable: op_parent_id, value: "{op_epic_wp}" }
+- CHECK: op_kind ne "prd"
+  TRUE:
+    - CHECK: empty op_prd_wp
+      TRUE:
+        - OUTPUT:
+            message: "No PRD work package found for '{prd_key}' — creating '{title}' without a parent."
+- READ: {description_file}
+  STORE: op_description
+- TOOL: create_work_package
+  SERVER: "{op_mcp_server}"
+  ARGS: { project_id: "{project}", subject: "{title}", type_id: "{op_type_id}", description: "{op_description}", status_id: "{op_status_id}", parent_id: "{op_parent_id}" }
+  STORE: op_create_result
+- FILTER:
+    source: op_create_result
+    select: id
+    store: issue_id

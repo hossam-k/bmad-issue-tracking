@@ -1,0 +1,19 @@
+# trackers/openproject/post-issue-comment.yaml
+#
+# Purpose: OpenProject implementation of common/post-issue-comment — adds a comment to the work
+#          package. Best-effort like the GitLab/GitHub path: a failed call warns and the caller
+#          carries on.
+# Input variables:
+#   - issue_id: the work package id
+#   - comment_file: path to the file holding the comment (markdown)
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables: (none)
+# Side effects: adds a comment (activity) to the work package in OpenProject
+
+- INCLUDE: trackers/openproject/load-config
+- READ: {comment_file}
+  STORE: op_comment
+- TOOL: add_work_package_comment
+  SERVER: "{op_mcp_server}"
+  ARGS: { work_package_id: "{issue_id}", project_id: "{project}", comment: "{op_comment}" }
+  ON_ERROR: warn

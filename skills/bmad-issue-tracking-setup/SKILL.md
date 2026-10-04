@@ -121,6 +121,17 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
 - `_bmad/_config/custom/workflows/common/update-issue-status.yaml`
 - `_bmad/_config/custom/workflows/common/wait-for-green-ci.yaml`
 - `_bmad/_config/custom/workflows/common/write-ci-status.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/create-issue.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/find-issue.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/find-wp.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/get-issue-status.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/load-config.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/parse-ref.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/post-issue-comment.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/resolve-status.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/select-wp.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/update-issue-description.yaml`
+- `_bmad/_config/custom/workflows/trackers/openproject/update-issue-status.yaml`
 - `_bmad/_config/custom/workflows/issue-sync/prepare.yaml`
 - `_bmad/_config/custom/workflows/issue-sync/sync.yaml`
 - `_bmad/_config/custom/workflows/bmad-prd/activation.yaml`
