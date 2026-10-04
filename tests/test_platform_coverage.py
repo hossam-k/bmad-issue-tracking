@@ -1,6 +1,7 @@
 """Validate that platform-specific RUN steps have correct CLI/platform pairing.
 
-P1 — checks that glab commands run on PLATFORM:gitlab and gh on PLATFORM:github.
+P1 — checks that glab commands run on PLATFORM/GIT_PLATFORM:gitlab and gh on
+PLATFORM/GIT_PLATFORM:github.
 Does NOT recurse into branches (same limitation as variable flow).
 """
 
@@ -25,7 +26,7 @@ class TestPlatformCoverage:
             platform = None
             cmd = step["raw_value"]
             for _, key, value in step["block"]:
-                if key == "PLATFORM":
+                if key in ("PLATFORM", "GIT_PLATFORM"):
                     platform = value
             if platform is None:
                 continue

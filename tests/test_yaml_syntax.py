@@ -36,6 +36,42 @@ class TestYamlSyntax:
                             f"{rel}:L{step['start_line']+1}: invalid PLATFORM '{value}'"
                         )
 
+    def test_git_platform_values(self, all_workflows):
+        """GIT_PLATFORM annotation must be 'gitlab' or 'github' only."""
+        for rel, wf in all_workflows.items():
+            for step in flatten_steps(wf["steps"]):
+                for _, key, value in step["block"]:
+                    if key == "GIT_PLATFORM":
+                        assert value in ("gitlab", "github"), (
+                            f"{rel}:L{step['start_line']+1}: invalid GIT_PLATFORM '{value}'"
+                        )
+
+    def test_platform_and_git_platform_exclusive(self, all_workflows):
+        """A step selects on the tracker (PLATFORM) or the git remote (GIT_PLATFORM), not both."""
+        for rel, wf in all_workflows.items():
+            for step in flatten_steps(wf["steps"]):
+                keys = {key for _, key, _ in step["block"]}
+                assert not {"PLATFORM", "GIT_PLATFORM"} <= keys, (
+                    f"{rel}:L{step['start_line']+1}: step has both PLATFORM and GIT_PLATFORM"
+                )
+
+    def test_tool_steps_are_well_formed(self, all_workflows):
+        """TOOL steps name a tool, take SERVER as a {variable}, and use a valid ON_ERROR."""
+        for rel, wf in all_workflows.items():
+            for step in flatten_steps(wf["steps"]):
+                if step["type"] != "TOOL":
+                    continue
+                where = f"{rel}:L{step['start_line']+1}"
+                assert step["raw_value"].strip(), f"{where}: TOOL has no tool name"
+                fields = {key: value for _, key, value in step["block"]}
+                server = fields.get("SERVER", "").strip("\"' ")
+                assert server.startswith("{") and server.endswith("}"), (
+                    f"{where}: TOOL SERVER must be a {{variable}}, got '{server}'"
+                )
+                assert fields.get("ON_ERROR", "stop") in ("stop", "warn"), (
+                    f"{where}: invalid ON_ERROR '{fields.get('ON_ERROR')}'"
+                )
+
     def test_check_has_condition(self, all_workflows):
         """CHECK steps must have a non-empty condition."""
         for rel, wf in all_workflows.items():
