@@ -9,12 +9,13 @@ import yaml
 
 WORKFLOWS_DIR = Path(__file__).parent.parent / "skills" / "bmad-issue-tracking-setup" / "assets" / "workflows"
 
-VALID_STEP_TYPES = {"INCLUDE", "READ", "FILTER", "RUN", "OUTPUT", "WRITE", "CHECK", "LOOP", "SET", "STOP", "CD"}
+VALID_STEP_TYPES = {"INCLUDE", "READ", "FILTER", "RUN", "OUTPUT", "WRITE", "CHECK", "LOOP", "SET", "STOP", "CD", "TOOL"}
 
 ALL_VALID_FIELDS = {
     "INCLUDE", "READ", "FILTER", "RUN", "OUTPUT", "WRITE", "CHECK",
-    "LOOP", "SET", "STOP", "CD",
-    "EXTRACT", "STORE", "EXPECT_EXIT", "CAPTURE", "PLATFORM",
+    "LOOP", "SET", "STOP", "CD", "TOOL",
+    "EXTRACT", "STORE", "EXPECT_EXIT", "CAPTURE", "PLATFORM", "GIT_PLATFORM",
+    "SERVER", "ARGS", "ON_ERROR",
 }
 
 PREDEFINED_VARS = {
@@ -77,10 +78,7 @@ def _parse_steps_from_lines(lines, base_indent=0):
                 line = lines[i]
                 # Check for next top-level step
                 next_m = _is_top_level_step(line, base_indent)
-                if next_m and next_m.group(2) in {
-                    "INCLUDE", "READ", "FILTER", "RUN", "OUTPUT", "WRITE",
-                    "CHECK", "LOOP", "SET", "STOP", "CD",
-                }:
+                if next_m and next_m.group(2) in VALID_STEP_TYPES:
                     break
                 if not line.strip() or line.strip().startswith("#"):
                     i += 1
@@ -385,6 +383,11 @@ def extract_step_var_refs(step):
         m = re.search(r"value:\s*[\"']?([^\"'}]+)", raw)
         if m:
             refs.update(extract_var_references(m.group(1)))
+    elif step_type == "TOOL":
+        for field in ("SERVER", "ARGS"):
+            v = get_step_field(step, field)
+            if v:
+                refs.update(extract_var_references(v))
     elif step_type == "LOOP":
         for field in ("items", "as"):
             v = get_step_field(step, field)
@@ -401,6 +404,11 @@ def extract_step_var_refs(step):
 def get_step_platform(step):
     """Get PLATFORM annotation from a step, or None."""
     return get_step_field(step, "PLATFORM")
+
+
+def get_step_git_platform(step):
+    """Get GIT_PLATFORM annotation from a step, or None."""
+    return get_step_field(step, "GIT_PLATFORM")
 
 
 @pytest.fixture

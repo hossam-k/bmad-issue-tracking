@@ -14,10 +14,17 @@
 #          assets/workflows/): bmad-prd/complete.yaml, edit-prd/complete.yaml,
 #          correct-course/complete.yaml (3 sites).
 # Input variables:
-#   - issue_id: the numeric ID of the issue (IID for GitLab, number for GitHub)
+#   - issue_id: the numeric ID of the issue (IID for GitLab, number for GitHub, work package id for OpenProject)
 #   - description_file: path to the file containing the new description
 # Output variables: (none)
-# Side effects: updates issue description on the issue tracker
+# Side effects: updates issue description on the issue tracker; removes description_file (the OpenProject adapter removes it itself)
+
+# OpenProject tracks work packages, not issues and labels: delegate to the tracker adapter,
+# then STOP to return to the caller (the GitLab/GitHub steps below do not apply).
+- CHECK: platform eq "openproject"
+  TRUE:
+    - INCLUDE: trackers/openproject/update-issue-description
+    - STOP
 
 - RUN: glab api --method PUT "projects/{project_enc}/issues/{issue_id}" --hostname {host} -F "description=@{description_file}"
   PLATFORM: gitlab

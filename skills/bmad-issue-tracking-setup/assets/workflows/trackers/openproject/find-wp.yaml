@@ -1,0 +1,102 @@
+# trackers/openproject/find-wp.yaml
+#
+# Purpose: Finds a work package inside the PRD's tree: PRD work package -> epic work packages ->
+#          story / retrospective work packages. Scoping by parent keeps several PRDs in one
+#          OpenProject project from colliding on "Epic 1" or "Story 1.3". Also leaves the parent
+#          ids in scope so create-issue can attach a new work package. The PRD and epic ids are
+#          cached for the run (only hits are cached, so a work package created later is found).
+# Input variables:
+#   - op_kind: prd, epic, story, retrospective, or text (from trackers/openproject/parse-ref)
+#   - op_epic_num: the epic number (from parse-ref)
+#   - op_subject: the subject to search for (from parse-ref)
+#   - prd_key: the PRD key
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables:
+#   - op_wp_id: the work package id; empty string if not found
+#   - op_prd_wp: the PRD work package id; empty string if there is none yet
+#   - op_epic_wp: the epic work package id for op_epic_num; empty string if there is none yet
+# Side effects: none (read-only search); writes and removes /tmp/op-list.json via select-wp
+
+- INCLUDE: trackers/openproject/load-config
+# Free text (an unrecognised reference): case-insensitive subject search across the project
+- CHECK: op_kind eq "text"
+  TRUE:
+    - TOOL: list_work_packages
+      SERVER: "{op_mcp_server}"
+      ARGS: { project_id: "{project}", subject: "{op_subject}", all_statuses: "true", page_size: "100" }
+      STORE: op_list_json
+    - SET: { variable: op_match, value: "{op_subject}" }
+    - SET: { variable: op_match_mode, value: "contains" }
+    - INCLUDE: trackers/openproject/select-wp
+    - SET: { variable: op_wp_id, value: "{op_selected}" }
+    - STOP
+# --- PRD work package (cached per project + prd_key; a miss is never cached) ---
+- SET: { variable: op_prd_scope, value: "{project}/{prd_key}" }
+- SET: { variable: op_prd_cached, value: "false" }
+- CHECK: exists op_prd_scope_loaded
+  TRUE:
+    - CHECK: op_prd_scope_loaded eq op_prd_scope
+      TRUE:
+        - SET: { variable: op_prd_cached, value: "true" }
+- CHECK: op_prd_cached eq "false"
+  TRUE:
+    - TOOL: list_work_packages
+      SERVER: "{op_mcp_server}"
+      ARGS: { project_id: "{project}", subject: "PRD: {prd_key}", all_statuses: "true", page_size: "100" }
+      STORE: op_list_json
+    - SET: { variable: op_match, value: "PRD: {prd_key}" }
+    - SET: { variable: op_match_mode, value: "exact" }
+    - INCLUDE: trackers/openproject/select-wp
+    - SET: { variable: op_prd_wp, value: "{op_selected}" }
+    - CHECK: empty op_prd_wp
+      FALSE:
+        - SET: { variable: op_prd_scope_loaded, value: "{op_prd_scope}" }
+- CHECK: op_kind eq "prd"
+  TRUE:
+    - SET: { variable: op_wp_id, value: "{op_prd_wp}" }
+    - STOP
+# Without a PRD work package nothing below it can be scoped
+- CHECK: empty op_prd_wp
+  TRUE:
+    - SET: { variable: op_epic_wp, value: "" }
+    - SET: { variable: op_wp_id, value: "" }
+    - STOP
+# --- Epic work package (the target for kind epic; the parent for stories and retrospectives) ---
+- SET: { variable: op_epic_scope, value: "{op_prd_scope}/{op_epic_num}" }
+- SET: { variable: op_epic_cached, value: "false" }
+- CHECK: exists op_epic_scope_loaded
+  TRUE:
+    - CHECK: op_epic_scope_loaded eq op_epic_scope
+      TRUE:
+        - SET: { variable: op_epic_cached, value: "true" }
+- CHECK: op_epic_cached eq "false"
+  TRUE:
+    - TOOL: list_work_packages
+      SERVER: "{op_mcp_server}"
+      ARGS: { project_id: "{project}", parent_id: "{op_prd_wp}", subject: "Epic {op_epic_num}:", all_statuses: "true", page_size: "100" }
+      STORE: op_list_json
+    - SET: { variable: op_match, value: "Epic {op_epic_num}:" }
+    - SET: { variable: op_match_mode, value: "prefix" }
+    - INCLUDE: trackers/openproject/select-wp
+    - SET: { variable: op_epic_wp, value: "{op_selected}" }
+    - CHECK: empty op_epic_wp
+      FALSE:
+        - SET: { variable: op_epic_scope_loaded, value: "{op_epic_scope}" }
+- CHECK: op_kind eq "epic"
+  TRUE:
+    - SET: { variable: op_wp_id, value: "{op_epic_wp}" }
+    - STOP
+# --- Story / retrospective work package: under its epic, or under the PRD when the epic
+#     work package did not exist yet at creation time ---
+- SET: { variable: op_search_parent, value: "{op_epic_wp}" }
+- CHECK: empty op_epic_wp
+  TRUE:
+    - SET: { variable: op_search_parent, value: "{op_prd_wp}" }
+- TOOL: list_work_packages
+  SERVER: "{op_mcp_server}"
+  ARGS: { project_id: "{project}", parent_id: "{op_search_parent}", subject: "{op_subject}", all_statuses: "true", page_size: "100" }
+  STORE: op_list_json
+- SET: { variable: op_match, value: "{op_subject}" }
+- SET: { variable: op_match_mode, value: "prefix" }
+- INCLUDE: trackers/openproject/select-wp
+- SET: { variable: op_wp_id, value: "{op_selected}" }

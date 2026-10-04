@@ -1,14 +1,15 @@
 # BMAD Issue Tracking
 
-BMAD module that mirrors sprint tracking to GitLab Issues or GitHub Issues. Supports both cloud and self-hosted instances via their respective CLIs (`glab` / `gh`).
+BMAD module that mirrors sprint tracking to GitLab Issues, GitHub Issues or OpenProject work packages. GitLab and GitHub (cloud and self-hosted) are reached through their CLIs (`glab` / `gh`); OpenProject through an MCP server. Code, branches, merge/pull requests and CI always stay on your git remote (GitLab or GitHub).
 
 Uses native BMad TOML customization for workflow integrations. Ships as a Skills-as-modules module (manifest declares `module = "bmad-issue-tracking"`).
 
 ## Prerequisites
 
 - BMAD Method module (BMM) 6.12.0+ installed in your project
-- `glab` CLI (GitLab) or `gh` CLI (GitHub) installed and authenticated
-- Repository with Issues enabled
+- `glab` CLI (GitLab) or `gh` CLI (GitHub) installed and authenticated — for the git remote, and for the issue tracker when it is GitLab or GitHub
+- Repository with Issues enabled (GitLab/GitHub issue tracking only)
+- For OpenProject: the [`openproject-mcp`](https://github.com/espace/openproject-mcp) server registered for the project (see [OpenProject](#openproject))
 - `uv` (mandatory from BMM 6.12.0+)
 
 ## Architecture
@@ -66,7 +67,8 @@ The installer reads each `skills/<name>/module-manifest.toml`; both declare `mod
 ```
 
 This deploys TOML overrides to `_bmad/custom/`, shared tasks to `_bmad/_config/custom/`, and configures:
-- **Platform** (GitLab or GitHub) — detected from git remote, with mismatch handling
+- **Platform** (GitLab, GitHub or OpenProject) — the git remote is detected, and a different issue tracker is handled
+- **OpenProject** (only when chosen) — MCP server, project, work package types and statuses
 - **Connection** (host and project) — always configured explicitly
 - **Branch patterns** (PRD branch, story branches) — controls automatic branch and MR/PR creation
 
@@ -233,17 +235,55 @@ The architecture is simpler: at the end of every `bmad-build-auto` session, the 
 
 **Limits (by design):** no MR discussion threads (the MR is a CI vehicle + trace, not a review conversation); `mark-mr-ready` is not used in this flow.
 
+## OpenProject
+
+Set `platform: openproject` to track the work in OpenProject instead of GitLab/GitHub issues. Your code, branches, MRs/PRs and CI stay on the git remote.
+
+| BMAD | OpenProject |
+|---|---|
+| PRD, epic, story, retrospective | Work packages of the types you map during setup |
+| `status:` label (backlog, ready-for-dev, in-progress, review, awaiting-operator, done, …) | The work package status you map to each BMAD status |
+| PRD → Epic → Story/Retrospective | Parent / child work packages |
+| Issue `#N` in an MR/PR description | `OP#N` plus the work package URL (OpenProject's GitHub/GitLab integration links it) |
+
+**Setup:** register the MCP server, then run `/bmad-issue-tracking-setup`, which verifies the server, lets you pick the project, and maps types and statuses (step 7b). Register it in the project's `.mcp.json` so unattended runs (bmad-loop) have it too; the token comes from your environment, so it is not committed:
+
+```json
+{
+  "mcpServers": {
+    "open-project": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/espace/openproject-mcp", "openproject-mcp"],
+      "env": {
+        "OPENPROJECT_URL": "https://<your-openproject-host>",
+        "OPENPROJECT_TOKEN": "${OPENPROJECT_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Needs an `openproject-mcp` version with `list_statuses` and the `subject` / `all_statuses` / `parent_id` options.
+
+**Good to know:**
+- Map `done` and `closed` to statuses OpenProject treats as closed — closing is not a separate call.
+- OpenProject's workflow rules decide which status changes are allowed; use an account that may make them, or the sync stops at the first rejected change.
+- Failures stop the run (like a failing `glab`/`gh` call), except posting a comment, which is best-effort.
+- Work packages are found by their title (`Story 1.3: …`) inside the PRD's tree, so don't rename the `PRD:` / `Epic N:` / `Story E.S:` / `Retrospective:` prefixes.
+
 ## Platform differences
 
-| Aspect | GitLab | GitHub |
-|---|---|---|
-| CLI | `glab` | `gh` |
-| Labels | `status::done` (double colon) | `status:done` (single colon) |
-| Description file | `-F "description=@file"` | `--body-file "file"` |
-| State changes | Single `glab api` call with `state_event` | Separate `gh issue close` / `gh issue reopen` |
-| Label updates | `-f "labels=..."` (replaces all) | `--add-label` / `--remove-label` (targeted) |
-| Boards | Created automatically | Skipped in v1 |
-| Enterprise | `-R` on subcommands, `--hostname` on `glab api` only | `-R` on subcommands, `--hostname` on `gh api` only |
+| Aspect | GitLab | GitHub | OpenProject |
+|---|---|---|---|
+| Reached through | `glab` | `gh` | MCP server (`openproject-mcp`) |
+| Type / status | Labels `type::story`, `status::done` (double colon) | Labels `type:story`, `status:done` (single colon) | Native work package type and status (ids from config) |
+| PRD / epic scoping | `prd::key` and `key::epic-N` labels | same, single colon | Parent work package tree |
+| Description file | `-F "description=@file"` | `--body-file "file"` | `description` argument |
+| State changes | Single `glab api` call with `state_event` | Separate `gh issue close` / `gh issue reopen` | The status decides open/closed |
+| Label updates | `-f "labels=..."` (replaces all) | `--add-label` / `--remove-label` (targeted) | n/a |
+| Boards | Created automatically | Skipped in v1 | Skipped |
+| MRs / PRs and CI | on GitLab | on GitHub | on the git remote (`git_platform`) |
+| Enterprise | `-R` on subcommands, `--hostname` on `glab api` only | `-R` on subcommands, `--hostname` on `gh api` only | `OPENPROJECT_URL` of the MCP server |
 
 ## After BMM updates
 
@@ -258,6 +298,12 @@ Set `issue_tracking.enabled: false` in `_bmad/custom/issue-tracking.yaml`.
 ## Troubleshooting
 
 **`bmad doctor` reports `state: "blocked"` for `issue-tracking`.** Expected until a tag matching the manifest's `version` is published. The install itself is healthy — only the release comparability check fails. (Dev installs always show this.)
+
+**OpenProject: `/bmad-issue-tracking-setup` says the MCP server is not available.** The server is not registered in this session. Register it (see [OpenProject](#openproject)), open a new session and re-run setup. Until then setup leaves `enabled: false`.
+
+**OpenProject: the sync stops with an error from `update_work_package`.** OpenProject rejected the status change, usually because its workflow does not allow that transition for the type and role. Allow the transition in OpenProject (Administration → Work packages → Workflows) or use a more privileged API token.
+
+**OpenProject: a work package is created under the PRD instead of its epic.** The epic's work package did not exist yet when the story was created. Create it (run `/bmad-issue-tracking-sync` once the epic exists) and move the story under it in OpenProject.
 
 **`/bmad-issue-tracking-setup` says "platform mismatch".** Your git remote (origin) and issue tracker are on different platforms (e.g. code on GitLab, issues on GitHub). The setup skill detects the mismatch and asks for the issue tracker host and project explicitly. The `git_platform` is set from the remote; `platform` is set from your answer. Issue ops use `platform`; MR/PR ops use `git_platform`. See [CLAUDE.md § Platform differences](./CLAUDE.md#platform-differences).
 
@@ -276,15 +322,17 @@ The `issue_tracking` block in `_bmad/custom/issue-tracking.yaml` controls the in
 ```yaml
 issue_tracking:
   enabled: true
-  platform: gitlab  # or github
+  platform: gitlab  # gitlab, github or openproject
   host: gitlab.com  # always configured by setup
-  project: group/project  # always configured by setup
+  project: group/project  # always configured by setup (the project id for openproject)
   branch_patterns:
     prd: "feat/{prd_key}/prd"
     story: "feat/{prd_key}/{story_key}"
 ```
 
-- **`platform`** — required. `gitlab` or `github`. Determines which CLI to use (`glab` / `gh`).
+- **`platform`** — required. `gitlab`, `github` or `openproject`: the issue tracker. For GitLab/GitHub it also picks the CLI (`glab` / `gh`).
+- **`git_platform`**, **`git_host`**, **`git_project`** — the git remote (where MRs/PRs and CI live). Always present for `openproject`.
+- **`openproject.mcp_server`**, **`openproject.type_ids`**, **`openproject.status_ids`** — only for `openproject`; written by setup.
 - **`host`** — required. The issue tracker host (e.g. `gitlab.com`, `github.com`, or a self-hosted instance).
 - **`project`** — required. The project path (e.g. `my-org/my-repo`).
 - **`branch_patterns.prd`** — required. Pattern for the PRD branch. Must contain `{prd_key}`.

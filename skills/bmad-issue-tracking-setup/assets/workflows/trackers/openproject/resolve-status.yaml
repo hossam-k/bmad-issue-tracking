@@ -1,0 +1,19 @@
+# trackers/openproject/resolve-status.yaml
+#
+# Purpose: Maps a BMAD status name (e.g. "in-progress") to the configured OpenProject
+#          status id. OpenProject can only set a status by id, never by name.
+# Input variables:
+#   - op_status_name: the BMAD status (backlog, ready-for-dev, in-progress, review,
+#                     awaiting-operator, done, deferred, optional, closed)
+# Output variables:
+#   - op_status_id: the OpenProject status id; empty string when that status is not mapped
+# Side effects: none
+
+- INCLUDE: trackers/openproject/load-config
+# Every id is quoted so an unmapped (empty) status keeps its position in the argument list.
+- RUN: uv run --no-project python -c "
+import sys
+names = ['backlog', 'ready-for-dev', 'in-progress', 'review', 'awaiting-operator', 'done', 'deferred', 'optional', 'closed']
+print(dict(zip(names, sys.argv[2:])).get(sys.argv[1], ''))
+" "{op_status_name}" "{op_status_backlog}" "{op_status_ready_for_dev}" "{op_status_in_progress}" "{op_status_review}" "{op_status_awaiting_operator}" "{op_status_done}" "{op_status_deferred}" "{op_status_optional}" "{op_status_closed}"
+  STORE: op_status_id

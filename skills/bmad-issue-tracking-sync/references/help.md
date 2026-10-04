@@ -15,6 +15,7 @@ This module exposes no new menus or commands. The sync skill is the only user-in
 
 - `bmm` ≥ 6.11.0 installed (`_bmad/bmm/config.yaml` exists, `# Version:` header ≥ 6.11.0)
 - `uv` available (mandatory for BMM 6.11.0+ workflow Python)
+- For OpenProject as the issue tracker: the `openproject-mcp` server connected (registered in the project's `.mcp.json` so unattended runs have it)
 - For bmad-loop consumers: `.bmad-loop/` directory present (optional — sync skill works without bmad-loop)
 
 ## Routing

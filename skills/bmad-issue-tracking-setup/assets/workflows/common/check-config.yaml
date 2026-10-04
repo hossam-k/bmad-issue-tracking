@@ -3,10 +3,11 @@
 # Purpose: Validates that the issue-tracking configuration is present and complete.
 # Input variables: (none)
 # Output variables:
-#   - platform: the configured platform ("gitlab" or "github")
-#   - git_platform: the git remote platform (required — set by /bmad-issue-tracking-setup step 7)
+#   - platform: the issue tracker ("gitlab", "github" or "openproject")
+#   - git_platform: the git remote platform, "gitlab" or "github" (required — set by /bmad-issue-tracking-setup step 7)
 #   - host: the issue tracker hostname
-#   - project: the issue tracker project path (group/project or owner/repo)
+#   - project: the issue tracker project path (group/project or owner/repo; the project id for OpenProject)
+#   - git_host, git_project, op_mcp_server: read only when platform is openproject (the code host's coordinates and the MCP server name)
 #   - worktree_base: base directory for worktrees (required — set by /bmad-issue-tracking-setup step 6)
 #   - branch_patterns: the configured branch patterns object
 # Side effects: none
@@ -57,3 +58,17 @@ import sys, urllib.parse
 print(urllib.parse.quote(sys.argv[1], safe=''))
 " {project}
   STORE: project_enc
+# OpenProject is only ever the issue tracker. Merge/pull requests and CI live on the git remote, so
+# git_platform must name it and the git remote's coordinates must be configured.
+- CHECK: platform eq "openproject"
+  TRUE:
+    - CHECK: git_platform eq "openproject"
+      TRUE:
+        - OUTPUT:
+            message: "git_platform must be gitlab or github when platform is openproject — it names the code host. Run /bmad-issue-tracking-setup (step 7) to configure."
+            stop: true
+    - READ: _bmad/custom/issue-tracking.yaml
+      EXTRACT:
+        git_host: issue_tracking.git_host
+        git_project: issue_tracking.git_project
+        op_mcp_server: issue_tracking.openproject.mcp_server

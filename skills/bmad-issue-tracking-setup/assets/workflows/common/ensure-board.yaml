@@ -3,9 +3,9 @@
 # Purpose: Ensures the BMAD Sprint Board exists on GitLab with status columns.
 # Input variables: (none — uses platform, host, project, sep from scope)
 # Output variables: (none)
-# Side effects: creates board and columns on GitLab; skipped on GitHub
+# Side effects: creates board and columns on GitLab; skipped on GitHub and OpenProject
 
-# GitHub: skip (uses Projects, not issue boards)
+# GitHub and OpenProject: skip (GitHub uses Projects; OpenProject has its own boards/views)
 - CHECK: platform ne "gitlab"
   TRUE:
     - STOP

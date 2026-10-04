@@ -21,7 +21,7 @@ The agent reads the YAML file and executes each step in order, from top to botto
 
 ## 2. Step Types
 
-There are 11 step types:
+There are 12 step types:
 
 | Type | Purpose |
 |------|---------|
@@ -36,10 +36,11 @@ There are 11 step types:
 | `SET` | Assign a literal value to a variable |
 | `STOP` | Halt workflow execution |
 | `CD` | Change agent working directory |
+| `TOOL` | Call an MCP tool |
 
 ### 2.1 INCLUDE
 
-Inserts all steps from the referenced sub-workflow at this position. Execution continues with the included steps and resumes in the parent file after the last included step.
+Inserts all steps from the referenced sub-workflow at this position. Execution continues with the included steps and resumes in the parent file after the last included step. A `STOP` inside an included sub-workflow ends only that sub-workflow and returns to the parent (see 2.10).
 
 **Syntax:**
 
@@ -173,6 +174,7 @@ Executes a CLI command in the shell.
 - `capture` (optional): what to capture -- `stdout` (default), `stderr`.
 - `expect_exit` (optional): expected exit code (default: `0`). If the command exits with a different code, the workflow stops with an error including the command and the actual exit code.
 - `platform` (optional): if specified (`gitlab` or `github`), the step is executed ONLY when the `platform` variable (from `issue_tracking.platform`) matches this value. If omitted, the step is always executed. Only one platform value is allowed per step -- use two separate RUN steps for platform divergence.
+- `git_platform` (optional, field name `GIT_PLATFORM`): like `platform`, but the step is executed ONLY when the `git_platform` variable (from `issue_tracking.git_platform`) matches (`gitlab` or `github`). Use it for commands that act on the git remote (merge/pull requests, pipelines, CI runs), which must follow the code host even when the issue tracker is a different system. A step MAY NOT carry both `PLATFORM` and `GIT_PLATFORM`.
 
 **Example (from edit-prd complete.yaml):**
 
@@ -186,6 +188,8 @@ Executes a CLI command in the shell.
 ```
 
 Only the step matching the configured platform is executed. The other is silently skipped.
+
+`PLATFORM` selects on the issue tracker; `GIT_PLATFORM` selects on the git remote. When the issue tracker is neither `gitlab` nor `github` (e.g. `openproject`), no `PLATFORM`-annotated RUN step executes -- issue operations are routed to a tracker adapter with `TOOL` steps instead.
 
 ### 2.5 OUTPUT
 
@@ -369,6 +373,8 @@ Halts workflow execution immediately.
 
 No message is displayed. To display a message before stopping, use OUTPUT with `stop: true`.
 
+**Inside an INCLUDE:** a `STOP` reached in an included sub-workflow ends that sub-workflow only; execution resumes in the parent after the `INCLUDE` step, with the variables set so far in scope. A `STOP` in the top-level workflow halts the whole run. Sub-workflows rely on this to return early (e.g. `common/create-issue` stops once it has found an existing issue). `OUTPUT` with `stop: true` follows the same rule.
+
 ### 2.11 CD
 
 Changes the agent's working directory. Unlike `RUN: cd <path>` (which runs in a subprocess and does not persist), `CD` instructs the agent to change its own session directory. All subsequent steps (RUN, READ, WRITE, etc.) operate relative to the new directory.
@@ -386,6 +392,33 @@ The value MUST be an absolute path or a variable reference resolving to an absol
 **Trace format:** `CD /path/to/directory`
 
 The agent MUST verify that the target directory exists before changing. If it does not exist, the workflow stops with an error.
+
+### 2.12 TOOL
+
+Calls a tool exposed by an MCP server and captures its result.
+
+**Syntax:**
+
+```yaml
+- TOOL: list_work_packages
+  SERVER: "{op_mcp_server}"
+  ARGS: { project_id: "{project}", subject: "{search_text}", all_statuses: "true" }
+  STORE: wp_search
+  ON_ERROR: warn
+```
+
+**Fields:**
+- `tool` (required): the MCP tool name without the server prefix. The agent calls the tool `mcp__{SERVER}__{tool}`.
+- `server` (required): the MCP server name. It MUST be a `{variable}` reference resolved from config -- never a hard-coded server name -- so each consumer decides how its server is registered.
+- `args` (optional): the tool arguments, as an inline mapping or an indented block. Every value supports `{variable}` substitution. All values are written as strings; the agent coerces each to the type declared in the tool's input schema (`"42"` becomes the integer 42, `"true"` becomes a boolean). Arguments with no value are omitted rather than sent empty.
+- `store` (optional): variable name to store the tool result. The result is stored as the tool's JSON output, as a raw string, and can be read with `FILTER`.
+- `on_error` (optional): `stop` (default) or `warn`. On failure with `stop`, the workflow stops with an error naming the server, tool and message. With `warn`, the agent displays a one-line warning, stores an empty string in `store`, sets `tool_error` to `"true"`, and continues. A successful call sets `tool_error` to `"false"`.
+
+A tool call fails when the server is not connected, the tool does not exist, the arguments are rejected, or the tool reports an error. The agent MUST NOT retry, substitute another tool, or fall back to a CLI.
+
+**Where TOOL may appear:** only in tracker adapter sub-workflows under `trackers/`. Workflows and `common/` atomics never contain `TOOL` steps; they INCLUDE an adapter.
+
+**Trace format:** `TOOL server.tool {arg1=val1, arg2=val2}`
 
 ---
 
@@ -445,7 +478,7 @@ These variables are resolved at workflow execution time:
 | `{planning_artifacts}` | `bmm/config.yaml` field `planning_artifacts` | Read from BMM config at workflow start |
 | `{implementation_artifacts}` | `bmm/config.yaml` field `implementation_artifacts` | Read from BMM config at workflow start |
 | `{project-root}` | Working directory root | Resolved from current git repo root |
-| `{sep}` | Label separator | `::` if platform is `gitlab`, `:` if `github`. Resolved by reading `_bmad/custom/issue-tracking.yaml` at workflow start. |
+| `{sep}` | Label separator | `::` if platform is `gitlab`, `:` if `github` or `openproject`. Resolved by reading `_bmad/custom/issue-tracking.yaml` at workflow start. OpenProject has no labels; `:` only keeps comparisons well-defined. |
 | `{prd_key}` | PRD frontmatter | Extracted from `{planning_artifacts}/prd.md` frontmatter field `prd_key` |
 | `{story_key}` | Sprint status | Resolved per-workflow by reading `{implementation_artifacts}/sprint-status.yaml` and matching the entry whose status equals the workflow's target status |
 | `{epic_num}` | Derived from `story_key` | First dash-separated segment (e.g., `1` from `1-3-login-form`) |
@@ -454,8 +487,8 @@ These variables are resolved at workflow execution time:
 | `{story_branch}` | Config pattern | `issue_tracking.branch_patterns.story` with `{prd_key}` and `{story_key}` substituted |
 | `{host}` | Issue tracking config | `issue_tracking.host` — issue tracker hostname |
 | `{project}` | Issue tracking config | `issue_tracking.project` — issue tracker project path (e.g. `group/project`) |
-| `{platform}` | Issue tracking config | `issue_tracking.platform` — `gitlab` or `github` |
-| `{git_platform}` | Issue tracking config | `issue_tracking.git_platform` — git remote platform (may differ from `platform`) |
+| `{platform}` | Issue tracking config | `issue_tracking.platform` — the issue tracker: `gitlab`, `github` or `openproject` |
+| `{git_platform}` | Issue tracking config | `issue_tracking.git_platform` — git remote platform, `gitlab` or `github` (may differ from `platform`; always differs when `platform` is `openproject`) |
 | `{git_host}` | Issue tracking config | `issue_tracking.git_host` — git remote hostname (only when `git_platform != platform`) |
 | `{git_project}` | Issue tracking config | `issue_tracking.git_project` — git remote project path (only when `git_platform != platform`) |
 | `{worktree_base}` | Issue tracking config | `issue_tracking.worktree_base` — base directory for worktrees |
@@ -481,6 +514,8 @@ The following situations cause the workflow to stop immediately. No retry. No fa
 | `WRITE` mode `create` but file exists | Stop workflow, output error with file path |
 | `WRITE` parent directory does not exist | Stop workflow, output error with directory path |
 | Variable reference undefined | Stop workflow, output error with variable name |
+| `TOOL` fails with `on_error: stop` | Stop workflow, output error with server, tool and message |
+| `TOOL` `server` not a `{variable}` or unresolved | Stop workflow, output error with the value |
 | Language version mismatch | Stop workflow, output error with required and actual versions |
 
 ---
@@ -498,6 +533,7 @@ Step N: STEP_TYPE value
   ● READ file → extracting key1, key2
   ● CHECK condition → TRUE (pass) / FALSE
   ● SET variable = value
+  ● TOOL server.tool {arg=val}
   ● INCLUDE sub-workflow → "result summary"
 
   Sub-workflow-name terminé. Variables en scope: key1=val1, key2=val2
@@ -510,6 +546,7 @@ Rules:
 - **SET**: show `variable = value`.
 - **RUN**: show the command (truncated if long).
 - **CD**: show the target path.
+- **TOOL**: show `server.tool` and its arguments; on `on_error: warn` failure show `→ WARN message`.
 - **FILTER**: show `source → key = value`.
 - **OUTPUT with store**: show `message → stored in variable`.
 - **STOP with stop: true**: show `STOP — reason`.
@@ -523,13 +560,13 @@ The trace MUST be compact — one line per step or sub-step. No prose explanatio
 
 ## 7. CLI Anti-Improvisation Rule
 
-The agent MUST NOT use any CLI command that is not explicitly specified in a RUN step within the workflow file or in the sync task command table. The agent MUST NOT add diagnostic commands (e.g., `git status`, `echo`, `cat`), exploration commands, or any command not in the workflow. The only CLI commands the agent may execute are those written in RUN steps and those listed in the sync task's command table.
+The agent MUST NOT use any CLI command that is not explicitly specified in a RUN step within the workflow file or in the sync task command table. The agent MUST NOT add diagnostic commands (e.g., `git status`, `echo`, `cat`), exploration commands, or any command not in the workflow. The only CLI commands the agent may execute are those written in RUN steps and those listed in the sync task's command table. Likewise the agent MAY call only the MCP tools written in TOOL steps; it MUST NOT call any other MCP tool, search for tools, or list server capabilities.
 
 ---
 
 ## 8. Language Version
 
-This specification is version **1.0**. Workflow files MAY declare a minimum language version. If a workflow file declares `min_lang_version: X.Y` and the deployed language spec version is lower, the workflow stops with an error stating the version mismatch before executing any steps.
+This specification is version **1.1** (1.1 adds the `TOOL` step and the `GIT_PLATFORM` RUN field). Workflow files MAY declare a minimum language version. If a workflow file declares `min_lang_version: X.Y` and the deployed language spec version is lower, the workflow stops with an error stating the version mismatch before executing any steps.
 
 ---
 

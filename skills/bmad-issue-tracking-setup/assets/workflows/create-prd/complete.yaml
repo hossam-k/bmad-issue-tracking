@@ -59,51 +59,11 @@ print(''.join(lines[start:]).strip())
 # Resolve default_branch (target for the PRD MR)
 - RUN: git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'
   STORE: default_branch
-# Resolve cross-platform issue_ref (same-platform uses #N; cross-platform uses full URL)
-- CHECK: git_platform eq platform
-  TRUE:
-    - SET: { variable: issue_ref, value: "Closes #{issue_id}" }
-  FALSE:
-    - CHECK: platform eq "gitlab"
-      TRUE:
-        - SET: { variable: issue_ref, value: "Related to https://{host}/{project}/-/issues/{issue_id}" }
-      FALSE:
-        - SET: { variable: issue_ref, value: "Related to https://{host}/{project}/issues/{issue_id}" }
-# Resolve mr_repo (gitlab: host/project; github: host/owner/repo — cross-platform uses git_host/git_project)
-- CHECK: git_platform eq "gitlab"
-  TRUE:
-    - CHECK: git_platform eq platform
-      TRUE:
-        - SET: { variable: mr_repo, value: "{host}/{project}" }
-      FALSE:
-        - READ: _bmad/custom/issue-tracking.yaml
-          EXTRACT:
-            git_host: issue_tracking.git_host
-            git_project: issue_tracking.git_project
-        - SET: { variable: mr_repo, value: "{git_host}/{git_project}" }
-  FALSE:
-    - CHECK: git_platform eq platform
-      TRUE:
-        - SET: { variable: mr_repo, value: "{host}/{project}" }
-      FALSE:
-        - READ: _bmad/custom/issue-tracking.yaml
-          EXTRACT:
-            git_host: issue_tracking.git_host
-            git_project: issue_tracking.git_project
-        - RUN: uv run --no-project python -c "
-import sys
-parts = sys.argv[1].split('/')
-print(parts[0])
-" {git_project}
-          STORE: git_owner
-        - RUN: uv run --no-project python -c "
-import sys
-parts = sys.argv[1].split('/')
-print(parts[1])
-" {git_project}
-          STORE: git_repo
-        - SET: { variable: mr_repo, value: "{git_host}/{git_owner}/{git_repo}" }
-# Write the cross-platform issue reference to a tmp file (the atomic reads from this path)
+# Resolve the issue reference for the MR description (#N, issue URL, or OP#N) and where the MR lives (git remote)
+- SET: { variable: issue_ref_verb, value: "Closes" }
+- INCLUDE: common/resolve-issue-ref
+- INCLUDE: common/resolve-mr-repo
+# Write the issue reference to a tmp file (the atomic reads from this path)
 - WRITE:
     file: /tmp/ensure-mr-prd-desc.md
     content: "{issue_ref}"

@@ -1,0 +1,44 @@
+# trackers/openproject/load-config.yaml
+#
+# Purpose: Loads the OpenProject settings — MCP server name, work package type ids and
+#          status ids — from the issue-tracking config. Idempotent: does nothing when
+#          the settings are already loaded in this scope.
+# Input variables:
+#   - project: the OpenProject project id (from common/check-config)
+# Output variables:
+#   - op_mcp_server: name of the MCP server that exposes the OpenProject tools
+#   - op_type_prd: work package type id for PRDs
+#   - op_type_epic: work package type id for epics
+#   - op_type_story: work package type id for stories
+#   - op_type_retrospective: work package type id for retrospectives
+#   - op_status_backlog: status id for BMAD status backlog ("" when not mapped)
+#   - op_status_ready_for_dev: status id for ready-for-dev
+#   - op_status_in_progress: status id for in-progress
+#   - op_status_review: status id for review
+#   - op_status_awaiting_operator: status id for awaiting-operator
+#   - op_status_done: status id for done (must be a closed status in OpenProject)
+#   - op_status_deferred: status id for deferred
+#   - op_status_optional: status id for optional
+#   - op_status_closed: status id for closed (must be a closed status in OpenProject)
+#   - op_config_loaded: "true" once the settings above are in scope
+# Side effects: none
+
+- CHECK: exists op_config_loaded
+  FALSE:
+    - READ: _bmad/custom/issue-tracking.yaml
+      EXTRACT:
+        op_mcp_server: issue_tracking.openproject.mcp_server
+        op_type_prd: issue_tracking.openproject.type_ids.prd
+        op_type_epic: issue_tracking.openproject.type_ids.epic
+        op_type_story: issue_tracking.openproject.type_ids.story
+        op_type_retrospective: issue_tracking.openproject.type_ids.retrospective
+        op_status_backlog: issue_tracking.openproject.status_ids.backlog
+        op_status_ready_for_dev: issue_tracking.openproject.status_ids.ready-for-dev
+        op_status_in_progress: issue_tracking.openproject.status_ids.in-progress
+        op_status_review: issue_tracking.openproject.status_ids.review
+        op_status_awaiting_operator: issue_tracking.openproject.status_ids.awaiting-operator
+        op_status_done: issue_tracking.openproject.status_ids.done
+        op_status_deferred: issue_tracking.openproject.status_ids.deferred
+        op_status_optional: issue_tracking.openproject.status_ids.optional
+        op_status_closed: issue_tracking.openproject.status_ids.closed
+    - SET: { variable: op_config_loaded, value: "true" }

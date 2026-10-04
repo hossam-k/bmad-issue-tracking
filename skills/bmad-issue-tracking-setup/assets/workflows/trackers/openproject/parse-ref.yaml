@@ -1,0 +1,57 @@
+# trackers/openproject/parse-ref.yaml
+#
+# Purpose: Parses a work item reference into its kind, epic number and the subject to search
+#          for. The reference is either a canonical issue title ("PRD: x", "Epic 1: Auth",
+#          "Story 1.3: Login Form", "Retrospective: Epic 1") or a sprint key ("epic-1",
+#          "1-3-login-form", "epic-1-retrospective", or a bare epic number "1").
+# Input variables:
+#   - ref_text: the title or sprint key to parse
+# Output variables:
+#   - op_kind: prd, epic, story, retrospective, or text (anything else — searched as free text)
+#   - op_epic_num: the epic number; empty for prd and text
+#   - op_subject: the subject to search for — a prefix of the work package subject
+#                 ("Story 1.3:", "Epic 1:", "Retrospective: Epic 1"), the full subject for a
+#                 PRD, or the raw text for kind text
+# Side effects: none
+
+- RUN: uv run --no-project python -c "
+import re, sys
+t = sys.argv[1].strip()
+if t.startswith('PRD:'):
+    print('prd')
+elif re.match(r'(Retrospective: Epic \d+|epic-\d+-retrospective)', t):
+    print('retrospective')
+elif re.match(r'Epic \d+:', t) or re.fullmatch(r'epic-\d+|\d+', t):
+    print('epic')
+elif re.match(r'Story \d+\.\d+:', t) or re.match(r'\d+-\d+', t):
+    print('story')
+else:
+    print('text')
+" "{ref_text}"
+  STORE: op_kind
+- RUN: uv run --no-project python -c "
+import re, sys
+t = sys.argv[1].strip()
+m = (re.match(r'Epic (\d+):', t) or re.match(r'Retrospective: Epic (\d+)', t)
+     or re.match(r'Story (\d+)\.\d+:', t) or re.match(r'epic-(\d+)', t)
+     or re.match(r'(\d+)-\d+', t) or re.fullmatch(r'(\d+)', t))
+print(m.group(1) if m and sys.argv[2] in ('epic', 'story', 'retrospective') else '')
+" "{ref_text}" "{op_kind}"
+  STORE: op_epic_num
+- RUN: uv run --no-project python -c "
+import re, sys
+t = sys.argv[1].strip()
+e = sys.argv[2]
+k = sys.argv[3]
+if k == 'epic':
+    print('Epic ' + e + ':')
+elif k == 'retrospective':
+    print('Retrospective: Epic ' + e)
+elif k == 'story':
+    m = re.match(r'Story (\d+)\.(\d+):', t)
+    p = t.split('-')
+    print('Story ' + m.group(1) + '.' + m.group(2) + ':' if m else 'Story ' + p[0] + '.' + p[1] + ':')
+else:
+    print(t)
+" "{ref_text}" "{op_epic_num}" "{op_kind}"
+  STORE: op_subject

@@ -1,0 +1,37 @@
+# common/resolve-mr-repo.yaml
+#
+# Purpose: Resolves where merge/pull requests and CI live (the git remote), independent of
+#          the issue tracker. When the tracker and the git remote are the same platform it
+#          reuses host/project; otherwise it reads git_host/git_project from the config
+#          (always the case when the tracker is not gitlab/github, e.g. openproject).
+# Input variables:
+#   - platform: issue tracker platform (from check-config)
+#   - git_platform: git remote platform (from check-config)
+#   - host: issue tracker host (from check-config)
+#   - project: issue tracker project (from check-config)
+#   - project_enc: URL-encoded issue tracker project (from check-config)
+# Output variables:
+#   - mr_host: git remote hostname
+#   - mr_project: git remote project path (group/project or owner/repo)
+#   - mr_project_enc: URL-encoded mr_project (for GitLab API paths)
+#   - mr_repo: "{mr_host}/{mr_project}" — the -R argument for glab/gh MR/PR commands
+# Side effects: none
+
+- CHECK: git_platform eq platform
+  TRUE:
+    - SET: { variable: mr_host, value: "{host}" }
+    - SET: { variable: mr_project, value: "{project}" }
+    - SET: { variable: mr_project_enc, value: "{project_enc}" }
+  FALSE:
+    - READ: _bmad/custom/issue-tracking.yaml
+      EXTRACT:
+        git_host: issue_tracking.git_host
+        git_project: issue_tracking.git_project
+    - SET: { variable: mr_host, value: "{git_host}" }
+    - SET: { variable: mr_project, value: "{git_project}" }
+    - RUN: uv run --no-project python -c "
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=''))
+" {git_project}
+      STORE: mr_project_enc
+- SET: { variable: mr_repo, value: "{mr_host}/{mr_project}" }

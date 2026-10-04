@@ -1,78 +1,41 @@
 # common/merge-mr.yaml
 #
-# Purpose: Merge an MR/PR by IID. Cross-platform, 4 variants (gitlab/github × same/cross-platform target).
+# Purpose: Merge an MR/PR by IID on the git remote (GitLab MR or GitHub PR), whichever system is the issue tracker.
 # Input variables: mr_iid (numeric), squash (default "false")
 # Output variables:
 #   - merged ("true" if merge CLI succeeded)
 #   - merge_sha (string, from API after merge; empty if merge failed)
 #   - error (string, non-empty if merge failed)
-# Side effects: MERGES the MR/PR on the tracker (irreversible from here), then reads
+# Side effects: MERGES the MR/PR on the git remote (irreversible from here), then reads
 #   the resulting merge SHA from the API. Callers must treat a non-zero exit or a
 #   non-empty error as "not merged", never as "merge attempted".
 
-# Internal routing: determine target repo (same-platform uses host/project, cross-platform uses git_host/git_project)
-# Trigger on platform match first; fall back to git_platform for cross-platform case.
+# The git remote is resolved internally (mr_repo/mr_host/mr_project/mr_project_enc), so this works
+# the same when the issue tracker is GitLab, GitHub or OpenProject. GIT_PLATFORM selects the CLI.
+- INCLUDE: common/resolve-mr-repo
 
-# === GitLab — same-platform (issue tracker is gitlab) ===
-- CHECK: platform eq "gitlab"
-  TRUE:
-    - CHECK: git_platform eq platform
-      TRUE:
-        - RUN: glab mr merge --yes --squash={squash} -R "{host}/{project}" {mr_iid}
-          STORE: gl_merge_out
-          PLATFORM: gitlab
-          EXPECT_EXIT: any
-        # After merge, fetch the merge commit SHA via API (avoids the hardcoded git -C path issue)
-        - RUN: glab api "projects/{project_enc}/merge_requests/{mr_iid}" --hostname {host} | uv run --no-project python -c "
+# === GitLab ===
+- RUN: glab mr merge --yes --squash={squash} -R "{mr_repo}" {mr_iid}
+  STORE: gl_merge_out
+  GIT_PLATFORM: gitlab
+  EXPECT_EXIT: any
+# After merge, fetch the merge commit SHA via API (avoids the hardcoded git -C path issue)
+- RUN: glab api "projects/{mr_project_enc}/merge_requests/{mr_iid}" --hostname {mr_host} | uv run --no-project python -c "
 import json, sys
 m = json.load(sys.stdin)
 print(m.get('merge_commit_sha', '') or '')
 "
-          STORE: merge_sha
-          PLATFORM: gitlab
+  STORE: merge_sha
+  GIT_PLATFORM: gitlab
 
-# === GitLab — cross-platform (git remote != issue tracker) ===
-- CHECK: platform eq "gitlab"
-  TRUE:
-    - CHECK: git_platform neq platform
-      TRUE:
-        - RUN: glab mr merge --yes --squash={squash} -R "{git_host}/{git_project}" {mr_iid}
-          STORE: gl_merge_out
-          PLATFORM: gitlab
-          EXPECT_EXIT: any
-        - RUN: glab api "projects/{project_enc}/merge_requests/{mr_iid}" --hostname {host} | uv run --no-project python -c "
-import json, sys
-m = json.load(sys.stdin)
-print(m.get('merge_commit_sha', '') or '')
-"
-          STORE: merge_sha
-          PLATFORM: gitlab
-
-# === GitHub — same-platform ===
-- CHECK: platform eq "github"
-  TRUE:
-    - CHECK: git_platform eq platform
-      TRUE:
-        - RUN: gh pr merge {mr_iid} --squash --delete-branch -R "{host}/{project}"
-          STORE: gh_merge_out
-          PLATFORM: github
-          EXPECT_EXIT: any
-        - RUN: gh api repos/{host}/{project}/pulls/{mr_iid} --jq .merge_commit_sha
-          STORE: merge_sha
-          PLATFORM: github
-
-# === GitHub — cross-platform ===
-- CHECK: platform eq "github"
-  TRUE:
-    - CHECK: git_platform neq platform
-      TRUE:
-        - RUN: gh pr merge {mr_iid} --squash --delete-branch -R "{git_host}/{git_owner}/{git_repo}"
-          STORE: gh_merge_out
-          PLATFORM: github
-          EXPECT_EXIT: any
-        - RUN: gh api repos/{git_host}/{git_owner}/{git_repo}/pulls/{mr_iid} --jq .merge_commit_sha
-          STORE: merge_sha
-          PLATFORM: github
+# === GitHub ===
+- RUN: gh pr merge {mr_iid} --squash --delete-branch -R "{mr_repo}"
+  STORE: gh_merge_out
+  GIT_PLATFORM: github
+  EXPECT_EXIT: any
+- RUN: gh api repos/{mr_project}/pulls/{mr_iid} --hostname {mr_host} --jq .merge_commit_sha
+  STORE: merge_sha
+  GIT_PLATFORM: github
 
 # Derive merged/error from CLI outputs (truth source = exit code, not pipeline_status)
 - RUN: uv run --no-project python -c "

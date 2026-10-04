@@ -9,6 +9,11 @@
 # NOTE: || true suppresses ALL errors (not just "already exists"), including auth/network
 # failures. The sync skill (/bmad-issue-tracking-sync) handles additional dynamic/extended labels.
 
+# OpenProject has no labels (status and type are native work package fields): nothing to create.
+- CHECK: platform eq "openproject"
+  TRUE:
+    - STOP
+
 # Type labels
 - SET: { variable: label_name, value: "type{sep}prd" }
 - INCLUDE: common/create-label

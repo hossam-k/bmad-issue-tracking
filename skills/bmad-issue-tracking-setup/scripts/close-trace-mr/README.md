@@ -42,7 +42,9 @@ Set by `bmad-loop/src/bmad_loop/plugins/bus.py::_hook_env` (line 85):
 1. `BMAD_LOOP_SETTING_*` overrides (manual operator escape hatch).
 2. `_bmad/custom/issue-tracking.yaml` — keys `platform` + `host` + `project`,
    or `git_platform` + `git_host` + `git_project` when the issue tracker
-   differs from the git remote.
+   differs from the git remote. The trace MR/PR always lives on the git remote,
+   so when the tracker is `openproject` (which has no MRs) the `git_*` keys are
+   required.
 
 If no `platform` is found after both passes, the hook no-ops cleanly and
 writes `status: skipped` to the marker. This happens for projects that have

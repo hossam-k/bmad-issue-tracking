@@ -5,14 +5,15 @@ Deploys the issue-tracking override assets into a consumer project's `_bmad/` tr
 ## What it copies
 
 - TOML pointers in `assets/custom/bmad-*.toml` → `_bmad/custom/` (override bmm workflows' `on_complete` + `activation_steps_append`)
-- YAML workflows in `assets/workflows/**` → `_bmad/_config/custom/workflows/` (executed by the hooks above)
+- YAML workflows in `assets/workflows/**` → `_bmad/_config/custom/workflows/` (executed by the hooks above; `trackers/openproject/` holds the OpenProject issue-tracker adapter)
 - Optional: `scripts/bmad-loop/ci-gate/ci-status.sh` → consumer's `.bmad-loop/` (only when project uses bmad-loop)
 - Optional: `scripts/close-trace-mr/**` → consumer's `.bmad-loop/plugins/` (only when bmad-loop + issue-tracking coexist)
 
 ## Refs the module expects at runtime (consumer side)
 
-- `_bmad/_config/custom/issue-tracking.yaml` — sidecar config the asset workflows read (platform, host, project, worktree_base, branch_patterns)
-- A working `glab` (GitLab) or `gh` (GitHub) CLI
+- `_bmad/custom/issue-tracking.yaml` — sidecar config the asset workflows read (platform, git_platform, host, project, worktree_base, branch_patterns; plus git_host, git_project and an `openproject` block when the issue tracker is OpenProject)
+- A working `glab` (GitLab) or `gh` (GitHub) CLI for the git remote and for a GitLab/GitHub issue tracker
+- For `platform: openproject`: the `openproject-mcp` server registered for the project (setup step 7b verifies it and maps work package types and statuses)
 
 ## References to running skills in this module
 

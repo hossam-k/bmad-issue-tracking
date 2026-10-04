@@ -6,17 +6,17 @@
 #          (post-dev-complete phases) and PRD-mode callers (bmad-prd/complete.yaml,
 #          create-prd/complete.yaml).
 # Input variables:
-#   - mr_repo: full repo path (gitlab "host/group/project"; github "host/owner/project")
+#   - mr_repo: full repo path of the git remote (from common/resolve-mr-repo: gitlab "host/group/project"; github "host/owner/project")
 #   - source_branch: branch with the work to merge (PRD: prd_branch; story: story_branch = prd_branch/story_key)
 #   - target_branch: branch to merge into (PRD: default_branch; story: prd_branch)
 #   - mr_title: title shown in the MR (story callers typically "Story N.M: Title" or
 #               "Story KEY — bmad-build-converge"; PRD callers "PRD: {prd_key}")
 #   - mr_description_file: path to a file containing the description body — caller
-#               is responsible for assembling the cross-platform issue reference
-#               ("Sprint key: ...\n\nRelated to #N" for story atomic; "Closes #N" for PRD)
+#               is responsible for assembling the issue reference with common/resolve-issue-ref
+#               ("Sprint key: ...\n\n{issue_ref}" for story atomic; "{issue_ref}" for PRD)
 #   - mr_draft: "true" to create as draft, "false" for ready-to-merge (default "false")
 # Output variables: (none — call common/find-mr after to resolve mr_iid if needed)
-# Side effects: creates the MR/PR on the tracker if not found
+# Side effects: creates the MR/PR on the git remote if not found
 
 # Read description body from caller-supplied file (single source of truth — caller
 # composes the cross-platform reference; atomic just transports the text).

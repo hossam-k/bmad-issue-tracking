@@ -153,6 +153,28 @@ class TestParseIssueTrackingConfig:
             "project": "my-group/my-proj",
         }
 
+    def test_extracts_git_remote_keys(self, tmp_path: Path):
+        cfg = tmp_path / "issue-tracking.yaml"
+        cfg.write_text(
+            "issue_tracking:\n"
+            "  platform: openproject\n"
+            "  host: op.example.com\n"
+            "  project: \"123\"\n"
+            "  git_platform: github\n"
+            "  git_host: github.com\n"
+            "  git_project: acme/app\n",
+            encoding="utf-8",
+        )
+        out = ctm.parse_issue_tracking_config(cfg)
+        assert out == {
+            "platform": "openproject",
+            "host": "op.example.com",
+            "project": "123",
+            "git_platform": "github",
+            "git_host": "github.com",
+            "git_project": "acme/app",
+        }
+
     def test_handles_quoted_values(self, tmp_path: Path):
         cfg = tmp_path / "issue-tracking.yaml"
         cfg.write_text(
@@ -255,6 +277,54 @@ class TestResolveCtx:
         ctx = ctm.resolve_ctx(env, {"platform": "gitlab", "project": "g/p"})
         assert ctx is not None
         assert ctx.close_trace_mr is False
+
+    # --- the trace MR/PR lives on the git remote, not on the issue tracker ---
+
+    _OPENPROJECT_CFG = {
+        "platform": "openproject",
+        "host": "op.example.com",
+        "project": "123",
+        "git_platform": "github",
+        "git_host": "github.com",
+        "git_project": "acme/app",
+    }
+
+    def test_openproject_tracker_uses_git_remote(self):
+        ctx = ctm.resolve_ctx(self._ENV, self._OPENPROJECT_CFG)
+        assert ctx is not None
+        assert (ctx.platform, ctx.host, ctx.project) == ("github", "github.com", "acme/app")
+
+    def test_cross_platform_tracker_uses_git_remote(self):
+        cfg = {
+            "platform": "github", "host": "github.com", "project": "o/r",
+            "git_platform": "gitlab", "git_host": "gl.example.com", "git_project": "g/p",
+        }
+        ctx = ctm.resolve_ctx(self._ENV, cfg)
+        assert (ctx.platform, ctx.host, ctx.project) == ("gitlab", "gl.example.com", "g/p")
+
+    def test_same_platform_ignores_git_keys(self):
+        cfg = {
+            "platform": "gitlab", "host": "gl.example.com", "project": "g/p",
+            "git_platform": "gitlab", "git_host": "other.example.com", "git_project": "x/y",
+        }
+        ctx = ctm.resolve_ctx(self._ENV, cfg)
+        assert (ctx.platform, ctx.host, ctx.project) == ("gitlab", "gl.example.com", "g/p")
+
+    def test_platform_override_beats_git_keys(self):
+        env = {**self._ENV, "platform_override": "gitlab", "host_override": "gl.example.com",
+               "project_override": "g/p"}
+        ctx = ctm.resolve_ctx(env, self._OPENPROJECT_CFG)
+        assert (ctx.platform, ctx.host, ctx.project) == ("gitlab", "gl.example.com", "g/p")
+
+    def test_openproject_without_git_remote_is_a_config_error(self):
+        cfg = {"platform": "openproject", "host": "op.example.com", "project": "123"}
+        with pytest.raises(ctm.ConfigParseError, match="git_platform"):
+            ctm.resolve_ctx(self._ENV, cfg)
+
+    def test_openproject_without_git_project_is_a_noop(self):
+        cfg = {**self._OPENPROJECT_CFG}
+        del cfg["git_project"]
+        assert ctm.resolve_ctx(self._ENV, cfg) is None
 
 
 # -----------------------------------------------------------------------------

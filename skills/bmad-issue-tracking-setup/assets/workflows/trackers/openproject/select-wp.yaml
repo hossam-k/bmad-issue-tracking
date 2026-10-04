@@ -1,0 +1,39 @@
+# trackers/openproject/select-wp.yaml
+#
+# Purpose: Picks the id of the first work package in a list_work_packages result whose subject
+#          matches. Returns an empty string when none does (the FILTER step would stop the
+#          workflow instead, which is wrong for a "does it exist yet?" lookup).
+# Input variables:
+#   - op_list_json: the raw list_work_packages result
+#   - op_match: the subject text to match
+#   - op_match_mode: exact (subject equals), prefix (subject starts with), or contains
+#                    (case-insensitive substring)
+# Output variables:
+#   - op_selected: the matching work package id; empty string if none
+# Side effects: writes and removes /tmp/op-list.json
+
+- WRITE:
+    file: /tmp/op-list.json
+    content: "{op_list_json}"
+    mode: overwrite
+- RUN: uv run --no-project python -c "
+import json, sys
+data = json.load(open(sys.argv[1], encoding='utf-8'))
+want = sys.argv[2]
+mode = sys.argv[3]
+hit = ''
+for w in data.get('work_packages', []):
+    s = w.get('subject') or ''
+    if mode == 'exact':
+        ok = s == want
+    elif mode == 'contains':
+        ok = want.lower() in s.lower()
+    else:
+        ok = s.startswith(want)
+    if ok:
+        hit = str(w['id'])
+        break
+print(hit)
+" /tmp/op-list.json "{op_match}" "{op_match_mode}"
+  STORE: op_selected
+- RUN: rm -f /tmp/op-list.json
