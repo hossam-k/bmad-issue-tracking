@@ -201,3 +201,19 @@ class TestOutputVariablesUsed:
                     pytest.fail(
                         f"{rel}: output variable '{var}' not referenced in file"
                     )
+
+
+class TestSyncIssuesCreatePath:
+    """P0: a newly created issue that is closed right away must get its own new_status/close."""
+
+    def test_new_status_and_close_are_set_before_closing_a_created_issue(self):
+        content = load_all_workflows()["common/sync-issues.yaml"]["content"]
+        created = content.index("INCLUDE: common/create-issue")
+        closing = content.index("INCLUDE: common/update-issue-status", created)
+        between = content[created:closing]
+        assert re.search(r"variable: new_status, value: \"\{mapped_status\}\"", between), (
+            "create path calls update-issue-status without setting new_status"
+        )
+        assert re.search(r"variable: close, value: \"true\"", between), (
+            "create path calls update-issue-status without setting close"
+        )

@@ -268,6 +268,11 @@ else:
           - SET: { variable: labels, value: "type{sep}{entry_type}\nstatus{sep}{mapped_status}\nprd{sep}{prd_key}\n{prd_key}{sep}epic-{epic_num}" }
           - SET: { variable: description_file, value: "/tmp/issue-desc-{entry}.md" }
           - INCLUDE: common/create-issue
+          # update-issue-status below reads new_status and close; on this path nothing has set them
+          # (they are only set when an existing issue's status differs), so a stale or undefined value
+          # would be used. Both closing statuses (done, closed) close the issue.
+          - SET: { variable: new_status, value: "{mapped_status}" }
+          - SET: { variable: close, value: "true" }
           - CHECK: mapped_status eq "done"
             TRUE:
               - INCLUDE: common/update-issue-status
