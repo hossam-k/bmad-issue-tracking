@@ -10,14 +10,12 @@
 # Side effects: creates/updates issue on tracker, pushes branch, may create draft MR
 
 - INCLUDE: common/check-config
-# Read prd_key (should have been set during activation, re-derive if lost)
-- READ: {planning_artifacts}/prd.md
-  EXTRACT:
-    prd_key: frontmatter.prd_key
+# Read prd_key (should have been set during activation, re-derive from the PRD branch if lost)
+- INCLUDE: common/derive-prd-key
 - CHECK: empty prd_key
   TRUE:
     - OUTPUT:
-        message: "prd_key not found in frontmatter. Run /bmad-prd again."
+        message: "prd_key could not be derived from the current branch. Run /bmad-prd again."
         stop: true
 # Resolve prd_branch
 - READ: _bmad/custom/issue-tracking.yaml
@@ -48,7 +46,7 @@ for i, line in enumerate(lines):
             start = i + 1
             break
 print(''.join(lines[start:]).strip())
-" {planning_artifacts}/prd.md
+" {planning_artifacts}/prds/{prd_key}/prd.md
       STORE: prd_body
     - WRITE:
         file: /tmp/prd-desc.md
@@ -105,7 +103,7 @@ for i, line in enumerate(lines):
             start = i + 1
             break
 print(''.join(lines[start:]).strip())
-" {planning_artifacts}/prd.md
+" {planning_artifacts}/prds/{prd_key}/prd.md
       STORE: prd_body
     - WRITE:
         file: /tmp/prd-desc.md

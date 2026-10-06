@@ -11,7 +11,7 @@ description: 'Sync sprint-status.yaml entries to GitLab/GitHub Issues or OpenPro
 - Repository has Issues enabled (GitLab/GitHub issue tracking only)
 - For OpenProject (`platform: openproject`): the `openproject-mcp` server connected in this session (its name is `issue_tracking.openproject.mcp_server`); unattended runs need it registered in the project's `.mcp.json`
 - `sprint-status.yaml` exists at `{implementation_artifacts}/sprint-status.yaml`
-- `prd_key` in `prd.md` frontmatter (required — the sync fails closed if absent; run `/bmad-issue-tracking-setup` if not set)
+- A PRD at `{planning_artifacts}/prds/{prd_key}/prd.md` (required — the sync fails closed if `prd_key` cannot be resolved from the current branch or the single PRD folder)
 - Workflow files deployed by `/bmad-issue-tracking-setup` in `_bmad/_config/custom/workflows/`
 
 ## Instructions
@@ -37,4 +37,4 @@ description: 'Sync sprint-status.yaml entries to GitLab/GitHub Issues or OpenPro
 
 ## Unattended usage (after a bmad-loop run)
 
-The sync is fully silent — no prompts, no PRD worktree required (`common/find-prd-key` resolves `prd_key` from `prd.md` on the current tree; `common/mark-mr-ready` is a no-op when no MR exists). Run it after a `bmad-loop run` to mirror the sprint status bmad-loop maintained, then `git push origin main` to publish the local merge-back. See "BMAD Loop integration" in the README.
+The sync is fully silent — no prompts, no PRD worktree required (`common/find-prd-key` resolves `prd_key` from the current PRD/story branch, else the only folder under `prds/`; `common/mark-mr-ready` is a no-op when no MR exists). Run it after a `bmad-loop run` to mirror the sprint status bmad-loop maintained, then `git push origin main` to publish the local merge-back. See "BMAD Loop integration" in the README.

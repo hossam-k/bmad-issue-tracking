@@ -479,7 +479,7 @@ These variables are resolved at workflow execution time:
 | `{implementation_artifacts}` | `bmm/config.yaml` field `implementation_artifacts` | Read from BMM config at workflow start |
 | `{project-root}` | Working directory root | Resolved from current git repo root |
 | `{sep}` | Label separator | `::` if platform is `gitlab`, `:` if `github` or `openproject`. Resolved by reading `_bmad/custom/issue-tracking.yaml` at workflow start. OpenProject has no labels; `:` only keeps comparisons well-defined. |
-| `{prd_key}` | PRD frontmatter | Extracted from `{planning_artifacts}/prd.md` frontmatter field `prd_key` |
+| `{prd_key}` | PRD branch / folder | Derived from the PRD or story branch name (else the only folder under `{planning_artifacts}/prds/`); the PRD file is `{planning_artifacts}/prds/{prd_key}/prd.md` and its frontmatter `prd_key` mirrors it |
 | `{story_key}` | Sprint status | Resolved per-workflow by reading `{implementation_artifacts}/sprint-status.yaml` and matching the entry whose status equals the workflow's target status |
 | `{epic_num}` | Derived from `story_key` | First dash-separated segment (e.g., `1` from `1-3-login-form`) |
 | `{story_num}` | Derived from `story_key` | Second dash-separated segment (e.g., `3` from `1-3-login-form`) |

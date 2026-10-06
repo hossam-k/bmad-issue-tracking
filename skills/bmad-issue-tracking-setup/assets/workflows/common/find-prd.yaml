@@ -1,7 +1,9 @@
 # common/find-prd.yaml
 #
 # Purpose: Finds the PRD branch, pulls its worktree, and extracts prd_key.
-#           If prd_key is not in the PRD frontmatter, asks the user and persists it.
+#           prd_key comes from the current PRD branch, else from the only PRD branch;
+#           when ambiguous the user is asked. The PRD file is
+#           {planning_artifacts}/prds/{prd_key}/prd.md; its frontmatter is kept in sync.
 # Input variables: (none)
 # Output variables:
 #   - prd_key: the PRD key from frontmatter or user input
@@ -33,16 +35,30 @@ print(sys.argv[1].replace('{prd_key}', '*'))
     store: prd_worktree_path
 - RUN: cd {prd_worktree_path} && git pull --ff-only
   EXPECT_EXIT: 0
-- READ: {planning_artifacts}/prd.md
+- RUN: git branch --show-current
+  STORE: current_branch
+# Derive prd_key: current branch if it is a PRD branch, else the only PRD branch (empty if ambiguous)
+- RUN: git branch --list '{prd_branch_glob}' --format='%(refname:short)' | uv run --no-project python -c "
+import re, sys
+ph = chr(123) + 'prd_key' + chr(125)
+rx = re.compile('^' + '(?P<k>[^/]+)'.join(re.escape(x) for x in sys.argv[1].split(ph)) + '$')
+cur = rx.match((sys.argv[2:3] or [''])[0].strip())
+keys = [m.group('k') for m in map(rx.match, sys.stdin.read().split()) if m]
+print(cur.group('k') if cur else (keys[0] if len(set(keys)) == 1 else ''))
+" {prd_pattern} "{current_branch}"
+  STORE: prd_key
+- CHECK: empty prd_key
+  TRUE:
+    - OUTPUT:
+        message: "Several PRDs found:\n{prd_branches}\nWhich PRD key? (e.g. mobile-oidc)"
+        store: prd_key
+- READ: {planning_artifacts}/prds/{prd_key}/prd.md
   EXTRACT:
-    prd_key: frontmatter.prd_key
-- CHECK: exists prd_key
+    frontmatter_prd_key: frontmatter.prd_key
+- CHECK: exists frontmatter_prd_key
   TRUE:
     - STOP
   FALSE:
-    - OUTPUT:
-        message: "prd_key not found in PRD frontmatter. What is the PRD key? (e.g. mobile-oidc)"
-        store: prd_key
     - RUN: uv run --no-project python -c "
 import sys
 path, key = sys.argv[1], sys.argv[2]
@@ -54,6 +70,5 @@ for i in range(1, len(lines)):
         break
 with open(path, 'w', encoding='utf-8') as f:
     f.writelines(lines)
-" {planning_artifacts}/prd.md {prd_key}
+" {planning_artifacts}/prds/{prd_key}/prd.md {prd_key}
       EXPECT_EXIT: 0
-

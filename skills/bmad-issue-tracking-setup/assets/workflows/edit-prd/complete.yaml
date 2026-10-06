@@ -29,7 +29,7 @@ for i, line in enumerate(lines):
             start = i + 1
             break
 print(''.join(lines[start:]).strip())
-" {planning_artifacts}/prd.md
+" {planning_artifacts}/prds/{prd_key}/prd.md
   STORE: prd_body
 - WRITE:
     file: /tmp/prd-desc.md

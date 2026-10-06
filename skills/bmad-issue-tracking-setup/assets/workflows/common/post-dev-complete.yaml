@@ -21,9 +21,6 @@
 - RUN: pwd
   STORE: worktree
 # Derive issue metadata from current branch and spec
-- READ: {planning_artifacts}/prd.md
-  EXTRACT:
-    prd_key: frontmatter.prd_key
 - RUN: git branch --show-current
   STORE: current_branch
 - RUN: uv run --no-project python -c "

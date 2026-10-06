@@ -87,7 +87,7 @@ with open(sys.argv[1], 'r', encoding='utf-8') as f:
               - SET: { variable: description_file, value: "/tmp/desc.md" }
               - INCLUDE: common/update-issue-description
 # PRD: if modified, update issue description
-- CHECK: modified_files contains "{planning_artifacts}/prd.md"
+- CHECK: modified_files contains "{planning_artifacts}/prds/{prd_key}/prd.md"
   TRUE:
     - RUN: uv run --no-project python -c "
 import sys
@@ -102,7 +102,7 @@ for i, line in enumerate(lines):
             start = i + 1
             break
 print(''.join(lines[start:]).strip())
-" {planning_artifacts}/prd.md
+" {planning_artifacts}/prds/{prd_key}/prd.md
       STORE: prd_body
     - WRITE:
         file: /tmp/desc.md

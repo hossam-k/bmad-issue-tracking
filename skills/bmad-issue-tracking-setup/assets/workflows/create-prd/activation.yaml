@@ -13,6 +13,7 @@
 - RUN: uv run --no-project python -c "
 import sys, os
 path, key = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
 if not os.path.exists(path):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(f'---\nprd_key: {key}\n---\n')
@@ -25,7 +26,7 @@ else:
             break
     with open(path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
-" {planning_artifacts}/prd.md {prd_key}
+" {planning_artifacts}/prds/{prd_key}/prd.md {prd_key}
   EXPECT_EXIT: 0
 # Create or switch to PRD worktree
 - READ: _bmad/custom/issue-tracking.yaml

@@ -1,20 +1,29 @@
 # common/find-prd-key.yaml
 #
-# Purpose: Resolves prd_key from prd.md frontmatter WITHOUT switching to a PRD
-#           worktree. Silent (no prompts) — used by the unattended sync path
-#           (e.g. after a bmad-loop run). Fails closed if prd_key is missing.
+# Purpose: Resolves prd_key WITHOUT switching to a PRD worktree. Silent (no prompts) —
+#           used by the unattended sync path (e.g. after a bmad-loop run). The PRD file
+#           lives at {planning_artifacts}/prds/{prd_key}/prd.md, so the key is the folder name:
+#           taken from the current PRD/story branch, else from the only PRD folder present.
+#           Fails closed when neither resolves it.
 # Input variables: (none)
 # Output variables:
-#   - prd_key: the PRD key from prd.md frontmatter
+#   - prd_key: the PRD key (folder name under {planning_artifacts}/prds/)
 # Side effects: none
 
-- READ: {planning_artifacts}/prd.md
-  EXTRACT:
-    prd_key: frontmatter.prd_key
-- CHECK: exists prd_key
+- INCLUDE: common/derive-prd-key
+# Not on a PRD/story branch (e.g. main after a bmad-loop run): use the single PRD folder
+- CHECK: empty prd_key
   TRUE:
-    - STOP
-  FALSE:
+    - RUN: uv run --no-project python -c "
+import glob, os, sys
+found = sorted(glob.glob(os.path.join(sys.argv[1], 'prds', '*', 'prd.md')))
+print(os.path.basename(os.path.dirname(found[0])) if len(found) == 1 else '')
+" {planning_artifacts}
+      STORE: prd_key
+- CHECK: empty prd_key
+  TRUE:
     - OUTPUT:
-        message: "prd_key not found in {planning_artifacts}/prd.md frontmatter. Run /bmad-issue-tracking-setup to configure the PRD, or add 'prd_key:' to the PRD frontmatter."
+        message: "prd_key could not be resolved: the current branch is not a PRD or story branch and {planning_artifacts}/prds/ does not contain exactly one PRD. Switch to the PRD worktree (or its story worktree) and run again."
         stop: true
+- RUN: test -f {planning_artifacts}/prds/{prd_key}/prd.md
+  EXPECT_EXIT: 0

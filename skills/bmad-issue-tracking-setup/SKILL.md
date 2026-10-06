@@ -99,6 +99,7 @@ cp -rf <path>/workflows/* _bmad/_config/custom/workflows/
 - `_bmad/_config/custom/workflows/common/ensure-labels.yaml`
 - `_bmad/_config/custom/workflows/common/find-issue.yaml`
 - `_bmad/_config/custom/workflows/common/find-mr.yaml`
+- `_bmad/_config/custom/workflows/common/derive-prd-key.yaml`
 - `_bmad/_config/custom/workflows/common/find-prd.yaml`
 - `_bmad/_config/custom/workflows/common/find-prd-key.yaml`
 - `_bmad/_config/custom/workflows/common/find-stories.yaml`

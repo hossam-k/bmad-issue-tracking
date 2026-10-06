@@ -1,8 +1,8 @@
 # bmad-prd/activation.yaml
 #
 # Purpose: Detects intent (create vs update) and sets up the PRD worktree.
-#          - Create: no prd_key in frontmatter → ask for key, create worktree
-#          - Update: prd_key exists → find existing worktree, switch to it
+#          - Create: not on a PRD/story branch → ask for key, create worktree
+#          - Update: prd_key derived from the current PRD/story branch → find existing worktree, switch to it
 #          - Validate: same as update (prd_key exists, just critiquing)
 # Input variables: (none)
 # Output variables:
@@ -10,24 +10,9 @@
 # Side effects: creates/switches to PRD worktree; may update PRD frontmatter
 
 - INCLUDE: common/check-config
-# Detect intent: check if prd_key already exists in PRD frontmatter
-- RUN: uv run --no-project python -c "
-import sys, os
-path = sys.argv[1]
-if os.path.exists(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    in_frontmatter = False
-    for line in lines:
-        if line.strip() == '---':
-            in_frontmatter = not in_frontmatter
-            continue
-        if in_frontmatter and line.startswith('prd_key:'):
-            print(line.split(':', 1)[1].strip())
-            sys.exit(0)
-print('')
-" {planning_artifacts}/prd.md
-  STORE: prd_key
+# Detect intent: on a PRD/story branch the key is derived from the branch name (update/validate);
+# otherwise it is asked (create)
+- INCLUDE: common/derive-prd-key
 - CHECK: empty prd_key
   TRUE:
     # --- CREATE MODE ---
@@ -37,6 +22,7 @@ print('')
     - RUN: uv run --no-project python -c "
 import sys, os
 path, key = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
 if not os.path.exists(path):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(f'---\nprd_key: {key}\n---\n')
@@ -49,7 +35,7 @@ else:
             break
     with open(path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
-" {planning_artifacts}/prd.md {prd_key}
+" {planning_artifacts}/prds/{prd_key}/prd.md {prd_key}
       EXPECT_EXIT: 0
     - READ: _bmad/custom/issue-tracking.yaml
       EXTRACT:

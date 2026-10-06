@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **PRDs live at `{planning_artifacts}/prds/{prd_key}/prd.md`** (one folder per PRD) instead of a single `prd.md`. `prd_key` is the folder name, derived from the current PRD/story branch by the new `common/derive-prd-key.yaml`; `find-prd` derives it from the PRD branches (asks only when ambiguous) and `find-prd-key` falls back to the only PRD folder present, failing closed otherwise. All workflows that read or edit the PRD use the new path.
 - MR/PR and CI steps (`find-mr`, `get-mr-pipeline`, `get-failed-jobs`, `merge-mr`, `wait-for-green-ci`) now select on `git_platform` instead of the issue tracker, and read the git remote's coordinates from `common/resolve-mr-repo`. `post-dev-complete`, `bmad-prd` and `create-prd` use the two new helpers instead of hard-coded or duplicated blocks. With the tracker and git remote on different platforms these steps previously used the tracker's host and project.
 - `close-trace-mr` closes the trace MR/PR on the git remote when `git_platform` differs from `platform` (as its README already described).
 

@@ -309,7 +309,7 @@ Set `issue_tracking.enabled: false` in `_bmad/custom/issue-tracking.yaml`.
 
 **Stories appear in the wrong issue.** Parallel PRDs collide on story keys (`1-3-login-form` in two PRDs). `common/find-issue.yaml` is scoped by `prd_key` — pass it explicitly from the workflow (`prd_key` is captured during PRD activation and re-derived from `prd.md` in unattended flows).
 
-**`/bmad-issue-tracking-sync` prompts for `prd_key`.** You're running it without a PRD worktree. Use `common/find-prd-key.yaml` (auto-resolves from `prd.md` at the repo root, fails closed) or pass `prd_key` via the workflow variable scope. The bmad-loop flow runs unattended — see [CLAUDE.md § bmad-loop flow](./CLAUDE.md#bmad-loop-flow-unattended).
+**`/bmad-issue-tracking-sync` prompts for `prd_key`.** You're running it without a PRD worktree. Use `common/find-prd-key.yaml` (resolves the key from the current PRD/story branch, else the only folder under `{planning_artifacts}/prds/`; fails closed) or pass `prd_key` via the workflow variable scope. The bmad-loop flow runs unattended — see [CLAUDE.md § bmad-loop flow](./CLAUDE.md#bmad-loop-flow-unattended).
 
 **`ci-status.json` missing on disk.** The on_complete hook didn't run — typically because the build session was interrupted before reaching the hook. Re-run the build to regenerate. The `ci-status.sh` verify treats missing `ci-status.json` as fixable (rc=1), so bmad-loop retries via a repair session rather than escalating.
 

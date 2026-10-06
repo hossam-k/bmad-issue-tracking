@@ -1,0 +1,31 @@
+# common/derive-prd-key.yaml
+#
+# Purpose: Derives prd_key from the current branch name (PRD branch or story branch),
+#           so the PRD file path {planning_artifacts}/prds/{prd_key}/prd.md can be built.
+#           Silent: leaves prd_key empty when the branch matches neither pattern.
+# Input variables: (none)
+# Output variables:
+#   - prd_key: the PRD key, or empty when the current branch is not a PRD/story branch
+# Side effects: none
+
+- READ: _bmad/custom/issue-tracking.yaml
+  EXTRACT:
+    prd_pattern: issue_tracking.branch_patterns.prd
+    story_pattern: issue_tracking.branch_patterns.story
+- RUN: git branch --show-current
+  STORE: current_branch
+# Match the branch against each pattern with the placeholders turned into regex groups
+- RUN: uv run --no-project python -c "
+import re, sys
+branch = (sys.argv[1:2] or [''])[0].strip()
+ph_prd = chr(123) + 'prd_key' + chr(125)
+ph_story = chr(123) + 'story_key' + chr(125)
+found = ''
+for pat in sys.argv[2:4]:
+    parts = re.split('(' + re.escape(ph_prd) + '|' + re.escape(ph_story) + ')', pat)
+    rx = ''.join(('(?P<k>[^/]+)' if p == ph_prd else '[^/]+' if p == ph_story else re.escape(p)) for p in parts)
+    m = re.fullmatch(rx, branch)
+    found = found or (m.group('k') if m and ph_prd in pat else '')
+print(found)
+" "{current_branch}" {prd_pattern} {story_pattern}
+  STORE: prd_key
